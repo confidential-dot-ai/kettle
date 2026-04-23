@@ -76,28 +76,6 @@ The relationship between SLSA and in-toto is complementary. SLSA defines the req
 
 A complete Kettle build generates three files. Each serves a different purpose in the verification chain.
 
-### manifest.json
-
-The manifest is a human-readable summary of the build. It contains:
-
-```json
-{
-  "git_commit": "a1b2c3d4e5f67890abcdef1234567890abcdef12",
-  "git_tree": "7890abcdef1234567890abcdef1234567890abcde",
-  "lockfile_hash": "23b2e23aa04c93c350cac09ac73636e4ecedf564...",
-  "input_merkle_root": "72a97c73d0c59905c89dc7da145a5ecc3d809be5...",
-  "toolchain": {
-    "rustc_hash": "e6abf55ab1859e7c990be77fd593f5166...",
-    "cargo_hash": "51de284e8bb0d03dcee595a0fb1cb3a952..."
-  },
-  "artifacts": [
-    { "name": "my-app", "hash": "1d1ea25c371d4f6de8d6e3c26fdad2238..." }
-  ]
-}
-```
-
-This is for humans to inspect and debug. When something goes wrong, you look here to understand what inputs were used and what outputs were produced. The git commit and tree hash let you identify the exact source. The lockfile hash lets you verify dependency pinning. The input Merkle root is the cryptographic commitment to all inputs combined.
-
 ### provenance.json
 
 The provenance is a SLSA v1.2 statement in in-toto format. This is the machine-readable, interoperable record. It follows the SLSA specification exactly, which means other tools in the ecosystem can consume it without custom parsing.
@@ -160,7 +138,7 @@ The `metadata` provides operational information: when the build ran, how long it
 
 ### Evidence
 
-The `evidence` file contains the TEE attestation report, base64-encoded. This is what roots everything in hardware.
+The `evidence.json` file contains the TEE attestation report, base64-encoded. This is what roots everything in hardware.
 
 The attestation report is signed by the TEE using keys that chain back to the hardware vendor's root of trust. A verifier can check this signature against the vendor's certificate chain to confirm the report came from genuine hardware.
 

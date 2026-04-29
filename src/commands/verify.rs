@@ -23,6 +23,9 @@ pub async fn verify(path: &PathBuf) -> Result<()> {
     results.push(verify_signature(&verification));
     results.push(provenance.verify_predicate());
     results.push(verify_report_data(&verification, &provenance));
+    if let Some(ref nonce) = build.nonce {
+        results.push(verify_nonce(&verification, nonce));
+    }
     results.extend(provenance.verify_artifacts(&build.artifacts)?);
 
     // Print build information
@@ -104,6 +107,36 @@ fn verify_signature(verification_result: &VerificationResult) -> Verification {
     }
 }
 
+fn verify_nonce(
+    verification_result: &VerificationResult,
+    nonce: &[u8],
+) -> Verification {
+    let report_data = &verification_result.claims.report_data;
+    // Nonce is stored at report_data[32:64]
+    if report_data.len() < 64 {
+        return Verification::failure(
+            "Nonce verification failed",
+            "report_data too short to contain nonce",
+        );
+    }
+    let mut expected_nonce_padded = [0u8; 32];
+    let len = nonce.len().min(32);
+    expected_nonce_padded[..len].copy_from_slice(&nonce[..len]);
+
+    if report_data[32..64] == expected_nonce_padded {
+        Verification::success("Nonce freshness binding valid")
+    } else {
+        Verification::failure(
+            "Nonce freshness binding mismatch",
+            &format!(
+                "Expected nonce bytes: {}\nActual report_data[32:64]: {}",
+                hex::encode(&expected_nonce_padded),
+                hex::encode(&report_data[32..64]),
+            ),
+        )
+    }
+}
+
 fn verify_report_data(
     verification_result: &VerificationResult,
     provenance: &Provenance,
@@ -111,13 +144,21 @@ fn verify_report_data(
     let signed_data = &verification_result.claims.signed_data;
     let checksum = provenance.checksum();
 
-    match *signed_data == checksum {
+    // signed_data may be 64 bytes (provenance hash || nonce) — compare first 32
+    let provenance_portion = if signed_data.len() >= 32 {
+        &signed_data[..32]
+    } else {
+        signed_data
+    };
+
+    match provenance_portion == checksum {
         true => Verification::success("Provenance checksum match"),
         false => Verification::failure(
             "Provenance checksum mismatch",
             &format!(
-                "Expected provenance.json checksum {:?}\nActual provenance.json checksum   {:?}",
-                signed_data, checksum
+                "Expected provenance.json checksum {}\nActual report_data[0:32]          {}",
+                hex::encode(&checksum),
+                hex::encode(provenance_portion),
             ),
         ),
     }
@@ -127,6 +168,7 @@ struct Build {
     provenance_bytes: Vec<u8>,
     evidence_bytes: Vec<u8>,
     artifacts: Vec<DirEntry>,
+    nonce: Option<Vec<u8>>,
 }
 
 impl Build {
@@ -137,11 +179,13 @@ impl Build {
         let artifacts = fs_err::read_dir(project_dir.join("artifacts"))?
             .filter_map(|e| e.ok())
             .collect();
+        let nonce = fs_err::read(project_dir.join("nonce")).ok();
 
         let build = Build {
             provenance_bytes,
             evidence_bytes,
             artifacts,
+            nonce,
         };
 
         Ok(build)
@@ -209,11 +253,14 @@ mod tests {
                     tee: 0,
                     snp: 0,
                     microcode: 0,
+                    fmc: None,
                 },
                 platform_data: Default::default(),
             },
             report_data_match: None,
             init_data_match: None,
+            collateral_verified: false,
+            tcb_status: None,
         }
     }
 

@@ -6,7 +6,7 @@ repository = "https://github.com/lunal-dev/kettle"
 build = "build.rs"
 
 [features]
-attest = ["attestation/attest"]
+attest = ["attestation/attest", "attestation/snp"]
 
 [dependencies]
 anyhow = "1.0.101"
@@ -32,6 +32,8 @@ ecdsa = { version = "0.16.9", features = [
     "verifying",
 ] }
 flate2 = "1.1.9"
+tar = "0.4"
+axum = "0.8"
 fs-err = "3.3.0"
 hex = "0.4.3"
 memoffset = "0.9.1"
@@ -68,6 +70,11 @@ tracing-subscriber = { version = "=0.3.19", features = ["tracing"] }
 shadow-rs = { version = "1.7.1", default-features = false }
 serde_yaml = "0.9.34"
 pretty_assertions = "1.4.1"
+
+[[bin]]
+name = "kettle-server"
+path = "src/bin/kettle-server.rs"
+required-features = ["attest"]
 
 [dev-dependencies]
 tempfile = "3"

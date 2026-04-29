@@ -130,7 +130,6 @@ pub(crate) struct ToolBinaryInfo {
 }
 
 impl ToolBinaryInfo {
-    /// For rustup-managed tools (rustc, cargo): locate via `rustup which`, fall back to `which`.
     pub(crate) fn via_rustup(cmd: &str) -> Result<Self> {
         let ver = Command::new(cmd)
             .arg("--version")
@@ -138,16 +137,10 @@ impl ToolBinaryInfo {
             .with_context(|| format!("{cmd} not found"))?;
         let version = String::from_utf8(ver.stdout)?.trim().to_string();
 
-        let mut which = Command::new("rustup")
+        let which = Command::new("rustup")
             .args(["which", cmd])
             .output()
-            .with_context(|| format!("rustup which {cmd} failed"))?;
-        if which.stdout.is_empty() {
-            which = Command::new("which")
-                .arg(cmd)
-                .output()
-                .with_context(|| format!("which {cmd} failed"))?;
-        }
+            .with_context(|| format!("could not locate {cmd}"))?;
         let bin = PathBuf::from(String::from_utf8(which.stdout)?.trim().to_string());
         let sha256 = hex::encode(Sha256::digest(fs_err::read(&bin)?));
         Ok(Self { version, sha256 })
@@ -446,10 +439,10 @@ mod tests {
     }
 
     #[test]
-    fn git_context_not_a_repo() {
+    fn git_context_not_a_repo_errors() {
         let tmp = TempDir::new().unwrap();
         let result = GitContext::from_dir(&tmp.path().to_path_buf());
-        assert!(result.is_err());
+        assert!(result.is_err(), "should error when not in a git repo");
     }
 
     // --- ToolBinaryInfo ---

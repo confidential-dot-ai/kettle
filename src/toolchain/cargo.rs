@@ -83,9 +83,11 @@ impl ToolchainDriver for CargoInputs {
             .output()
             .context("failed to spawn cargo")?;
         if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(anyhow!(
-                "cargo build failed (exit {:?})",
-                output.status.code()
+                "cargo build failed (exit {:?}): {}",
+                output.status.code(),
+                stderr.chars().take(4000).collect::<String>()
             ));
         }
         Ok(BuildOutput {

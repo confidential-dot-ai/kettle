@@ -1,0 +1,1438 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 7bcc160..b674a5f 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -8,15 +8,6 @@ version = "2.0.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
+ 
+-[[package]]
+-name = "aho-corasick"
+-version = "1.1.4"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
+-dependencies = [
+- "memchr",
+-]
+-
+ [[package]]
+ name = "android_system_properties"
+ version = "0.1.5"
+@@ -165,15 +156,13 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+ 
+ [[package]]
+ name = "attestation"
+-version = "0.1.0"
+-source = "git+https://github.com/lunal-dev/attestation-rs?branch=feat%2Fnew-attestation-lib#c0323a12a21ac574cf40be49148b8d6b634bc0be"
++version = "0.3.2"
+ dependencies = [
+  "anyhow",
+  "async-trait",
+- "az-snp-vtpm",
+- "az-tdx-vtpm",
+- "base64 0.22.1",
++ "base64",
+  "cfg-if",
++ "chrono",
+  "der",
+  "ecdsa",
+  "getrandom 0.2.17",
+@@ -182,6 +171,7 @@ dependencies = [
+  "log",
+  "p256",
+  "p384",
++ "pem",
+  "pem-rfc7468 1.0.0",
+  "reqwest 0.12.28",
+  "rsa",
+@@ -192,6 +182,7 @@ dependencies = [
+  "sha2",
+  "signature",
+  "spki",
++ "subtle",
+  "tempfile",
+  "thiserror 2.0.18",
+  "tokio",
+@@ -229,51 +220,55 @@ dependencies = [
+ ]
+ 
+ [[package]]
+-name = "az-cvm-vtpm"
+-version = "0.8.1"
++name = "axum"
++version = "0.8.9"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "de89af1208d16b05ef093680a32a6d8e4dce9146caf30ae6aa6181777907285a"
++checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
+ dependencies = [
+- "jsonwebkey",
+- "memoffset",
+- "openssl",
+- "serde",
+- "serde-big-array",
++ "axum-core",
++ "bytes",
++ "form_urlencoded",
++ "futures-util",
++ "http",
++ "http-body",
++ "http-body-util",
++ "hyper",
++ "hyper-util",
++ "itoa",
++ "matchit",
++ "memchr",
++ "mime",
++ "percent-encoding",
++ "pin-project-lite",
++ "serde_core",
+  "serde_json",
+- "sev 7.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+- "sha2",
+- "thiserror 2.0.18",
+- "tss-esapi",
+- "zerocopy",
+-]
+-
+-[[package]]
+-name = "az-snp-vtpm"
+-version = "0.8.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "2d3d6071c96b6306e616d98ff18b8f13de2b55f16f494094f16e22f26d985311"
+-dependencies = [
+- "az-cvm-vtpm",
+- "clap",
+- "serde",
+- "sev 7.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+- "thiserror 2.0.18",
+- "ureq",
++ "serde_path_to_error",
++ "serde_urlencoded",
++ "sync_wrapper",
++ "tokio",
++ "tower",
++ "tower-layer",
++ "tower-service",
++ "tracing",
+ ]
+ 
+ [[package]]
+-name = "az-tdx-vtpm"
+-version = "0.8.1"
++name = "axum-core"
++version = "0.5.6"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "68381aac2d985b3482b67aa9766b0a5c97afcb7e794815871b824d7766cca56b"
++checksum = "08c78f31d7b1291f7ee735c1c6780ccde7785daae9a9206026862dab7d8792d1"
+ dependencies = [
+- "az-cvm-vtpm",
+- "base64-url",
+- "serde",
+- "serde_json",
+- "thiserror 2.0.18",
+- "ureq",
+- "zerocopy",
++ "bytes",
++ "futures-core",
++ "http",
++ "http-body",
++ "http-body-util",
++ "mime",
++ "pin-project-lite",
++ "sync_wrapper",
++ "tower-layer",
++ "tower-service",
++ "tracing",
+ ]
+ 
+ [[package]]
+@@ -282,33 +277,12 @@ version = "0.2.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
+ 
+-[[package]]
+-name = "base64"
+-version = "0.13.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
+-
+-[[package]]
+-name = "base64"
+-version = "0.21.7"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
+-
+ [[package]]
+ name = "base64"
+ version = "0.22.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+ 
+-[[package]]
+-name = "base64-url"
+-version = "3.0.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "f5b428e9fb429c6fda7316e9b006f993e6b4c33005e4659339fb5214479dddec"
+-dependencies = [
+- "base64 0.22.1",
+-]
+-
+ [[package]]
+ name = "base64ct"
+ version = "1.8.3"
+@@ -344,12 +318,6 @@ dependencies = [
+  "virtue",
+ ]
+ 
+-[[package]]
+-name = "bitfield"
+-version = "0.14.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "2d7e60934ceec538daadb9d8432424ed043a904d8e0243f3c6446bce549a46ac"
+-
+ [[package]]
+ name = "bitfield"
+ version = "0.19.4"
+@@ -370,12 +338,6 @@ dependencies = [
+  "syn",
+ ]
+ 
+-[[package]]
+-name = "bitflags"
+-version = "1.3.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
+-
+ [[package]]
+ name = "bitflags"
+ version = "2.10.0"
+@@ -576,35 +538,6 @@ dependencies = [
+  "unicode-xid",
+ ]
+ 
+-[[package]]
+-name = "cookie"
+-version = "0.18.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "4ddef33a339a91ea89fb53151bd0a4689cfce27055c291dfa69945475d22c747"
+-dependencies = [
+- "percent-encoding",
+- "time",
+- "version_check",
+-]
+-
+-[[package]]
+-name = "cookie_store"
+-version = "0.22.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "15b2c103cf610ec6cae3da84a766285b42fd16aad564758459e6ecf128c75206"
+-dependencies = [
+- "cookie",
+- "document-features",
+- "idna",
+- "indexmap",
+- "log",
+- "serde",
+- "serde_derive",
+- "serde_json",
+- "time",
+- "url",
+-]
+-
+ [[package]]
+ name = "core-foundation"
+ version = "0.9.4"
+@@ -774,15 +707,6 @@ dependencies = [
+  "syn",
+ ]
+ 
+-[[package]]
+-name = "document-features"
+-version = "0.2.12"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
+-dependencies = [
+- "litrs",
+-]
+-
+ [[package]]
+ name = "dunce"
+ version = "1.0.5"
+@@ -836,26 +760,6 @@ dependencies = [
+  "cfg-if",
+ ]
+ 
+-[[package]]
+-name = "enumflags2"
+-version = "0.7.12"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "1027f7680c853e056ebcec683615fb6fbbc07dbaa13b4d5d9442b146ded4ecef"
+-dependencies = [
+- "enumflags2_derive",
+-]
+-
+-[[package]]
+-name = "enumflags2_derive"
+-version = "0.7.12"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "67c78a4d8fdf9953a5c9d458f9efe940fd97a0cab0941c075a813ac594733827"
+-dependencies = [
+- "proc-macro2",
+- "quote",
+- "syn",
+-]
+-
+ [[package]]
+ name = "equivalent"
+ version = "1.0.2"
+@@ -888,6 +792,17 @@ dependencies = [
+  "subtle",
+ ]
+ 
++[[package]]
++name = "filetime"
++version = "0.2.27"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f98844151eee8917efc50bd9e8318cb963ae8b297431495d3f758616ea5c57db"
++dependencies = [
++ "cfg-if",
++ "libc",
++ "libredox",
++]
++
+ [[package]]
+ name = "find-msvc-tools"
+ version = "0.1.9"
+@@ -922,21 +837,6 @@ version = "0.1.5"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+ 
+-[[package]]
+-name = "foreign-types"
+-version = "0.3.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
+-dependencies = [
+- "foreign-types-shared",
+-]
+-
+-[[package]]
+-name = "foreign-types-shared"
+-version = "0.1.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
+-
+ [[package]]
+ name = "form_urlencoded"
+ version = "1.2.2"
+@@ -1068,7 +968,7 @@ version = "0.20.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "7b88256088d75a56f8ecfa070513a775dd9107f6530ef14919dac831af9cfe2b"
+ dependencies = [
+- "bitflags 2.10.0",
++ "bitflags",
+  "libc",
+  "libgit2-sys",
+  "log",
+@@ -1150,12 +1050,6 @@ dependencies = [
+  "digest",
+ ]
+ 
+-[[package]]
+-name = "hostname-validator"
+-version = "1.1.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "f558a64ac9af88b5ba400d99b579451af0d39c6d360980045b91aac966d705e2"
+-
+ [[package]]
+ name = "http"
+ version = "1.4.0"
+@@ -1195,6 +1089,12 @@ version = "1.10.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
+ 
++[[package]]
++name = "httpdate"
++version = "1.0.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
++
+ [[package]]
+ name = "hyper"
+ version = "1.8.1"
+@@ -1209,6 +1109,7 @@ dependencies = [
+  "http",
+  "http-body",
+  "httparse",
++ "httpdate",
+  "itoa",
+  "pin-project-lite",
+  "pin-utils",
+@@ -1240,7 +1141,7 @@ version = "0.1.20"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
+ dependencies = [
+- "base64 0.22.1",
++ "base64",
+  "bytes",
+  "futures-channel",
+  "futures-util",
+@@ -1485,30 +1386,14 @@ dependencies = [
+  "wasm-bindgen",
+ ]
+ 
+-[[package]]
+-name = "jsonwebkey"
+-version = "0.3.5"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "c57c852b14147e2bd58c14fde40398864453403ef632b1101db130282ee6e2cc"
+-dependencies = [
+- "base64 0.13.1",
+- "bitflags 1.3.2",
+- "generic-array",
+- "num-bigint",
+- "serde",
+- "serde_json",
+- "thiserror 1.0.69",
+- "yasna",
+- "zeroize",
+-]
+-
+ [[package]]
+ name = "kettle"
+ version = "0.1.1"
+ dependencies = [
+  "anyhow",
+  "attestation",
+- "base64 0.22.1",
++ "axum",
++ "base64",
+  "bincode 1.3.3",
+  "chrono",
+  "clap",
+@@ -1533,11 +1418,12 @@ dependencies = [
+  "serde_bytes",
+  "serde_json",
+  "serde_yaml",
+- "sev 7.1.0 (git+https://github.com/virtee/sev)",
++ "sev 7.1.0",
+  "sha2",
+  "shadow-rs",
+  "signature",
+  "tabled",
++ "tar",
+  "tempfile",
+  "thiserror 2.0.18",
+  "tokio",
+@@ -1593,8 +1479,9 @@ version = "0.1.12"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "3d0b95e02c851351f877147b7deea7b1afb1df71b63aa5f8270716e0c5720616"
+ dependencies = [
+- "bitflags 2.10.0",
++ "bitflags",
+  "libc",
++ "redox_syscall",
+ ]
+ 
+ [[package]]
+@@ -1621,12 +1508,6 @@ version = "0.8.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "6373607a59f0be73a39b6fe456b8192fcc3585f602af20751600e974dd455e77"
+ 
+-[[package]]
+-name = "litrs"
+-version = "1.0.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
+-
+ [[package]]
+ name = "log"
+ version = "0.4.29"
+@@ -1640,14 +1521,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
+ 
+ [[package]]
+-name = "mbox"
+-version = "0.7.1"
++name = "matchit"
++version = "0.8.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "26d142aeadbc4e8c679fc6d93fbe7efe1c021fa7d80629e615915b519e3bc6de"
+-dependencies = [
+- "libc",
+- "stable_deref_trait",
+-]
++checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
+ 
+ [[package]]
+ name = "memchr"
+@@ -1749,17 +1626,6 @@ version = "0.2.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "cf97ec579c3c42f953ef76dbf8d55ac91fb219dde70e49aa4a6b7d74e9919050"
+ 
+-[[package]]
+-name = "num-derive"
+-version = "0.4.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
+-dependencies = [
+- "proc-macro2",
+- "quote",
+- "syn",
+-]
+-
+ [[package]]
+ name = "num-integer"
+ version = "0.1.46"
+@@ -1799,15 +1665,6 @@ dependencies = [
+  "libc",
+ ]
+ 
+-[[package]]
+-name = "oid"
+-version = "0.2.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "9c19903c598813dba001b53beeae59bb77ad4892c5c1b9b3500ce4293a0d06c2"
+-dependencies = [
+- "serde",
+-]
+-
+ [[package]]
+ name = "oid-registry"
+ version = "0.7.1"
+@@ -1829,50 +1686,12 @@ version = "1.70.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+ 
+-[[package]]
+-name = "openssl"
+-version = "0.10.75"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "08838db121398ad17ab8531ce9de97b244589089e290a384c900cb9ff7434328"
+-dependencies = [
+- "bitflags 2.10.0",
+- "cfg-if",
+- "foreign-types",
+- "libc",
+- "once_cell",
+- "openssl-macros",
+- "openssl-sys",
+-]
+-
+-[[package]]
+-name = "openssl-macros"
+-version = "0.1.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
+-dependencies = [
+- "proc-macro2",
+- "quote",
+- "syn",
+-]
+-
+ [[package]]
+ name = "openssl-probe"
+ version = "0.2.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
+ 
+-[[package]]
+-name = "openssl-sys"
+-version = "0.9.111"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
+-dependencies = [
+- "cc",
+- "libc",
+- "pkg-config",
+- "vcpkg",
+-]
+-
+ [[package]]
+ name = "option-ext"
+ version = "0.2.0"
+@@ -1928,7 +1747,7 @@ version = "3.0.6"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
+ dependencies = [
+- "base64 0.22.1",
++ "base64",
+  "serde_core",
+ ]
+ 
+@@ -1956,41 +1775,6 @@ version = "2.3.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+ 
+-[[package]]
+-name = "picky-asn1"
+-version = "0.8.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "295eea0f33c16be21e2a98b908fdd4d73c04dd48c8480991b76dbcf0cb58b212"
+-dependencies = [
+- "oid",
+- "serde",
+- "serde_bytes",
+-]
+-
+-[[package]]
+-name = "picky-asn1-der"
+-version = "0.4.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "5df7873a9e36d42dadb393bea5e211fe83d793c172afad5fb4ec846ec582793f"
+-dependencies = [
+- "picky-asn1",
+- "serde",
+- "serde_bytes",
+-]
+-
+-[[package]]
+-name = "picky-asn1-x509"
+-version = "0.12.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "2c5f20f71a68499ff32310f418a6fad8816eac1a2859ed3f0c5c741389dd6208"
+-dependencies = [
+- "base64 0.21.7",
+- "oid",
+- "picky-asn1",
+- "picky-asn1-der",
+- "serde",
+-]
+-
+ [[package]]
+ name = "pin-project-lite"
+ version = "0.2.16"
+@@ -2244,12 +2028,12 @@ dependencies = [
+ ]
+ 
+ [[package]]
+-name = "rdrand"
+-version = "0.8.3"
++name = "redox_syscall"
++version = "0.7.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "d92195228612ac8eed47adbc2ed0f04e513a4ccb98175b6f2bd04d963b533655"
++checksum = "f450ad9c3b1da563fb6948a8e0fb0fb9269711c9c73d9ea1de5058c79c8d643a"
+ dependencies = [
+- "rand_core 0.6.4",
++ "bitflags",
+ ]
+ 
+ [[package]]
+@@ -2263,48 +2047,19 @@ dependencies = [
+  "thiserror 2.0.18",
+ ]
+ 
+-[[package]]
+-name = "regex"
+-version = "1.12.3"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
+-dependencies = [
+- "aho-corasick",
+- "memchr",
+- "regex-automata",
+- "regex-syntax",
+-]
+-
+-[[package]]
+-name = "regex-automata"
+-version = "0.4.14"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "6e1dd4122fc1595e8162618945476892eefca7b88c52820e74af6262213cae8f"
+-dependencies = [
+- "aho-corasick",
+- "memchr",
+- "regex-syntax",
+-]
+-
+ [[package]]
+ name = "regex-lite"
+ version = "0.1.9"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
+ 
+-[[package]]
+-name = "regex-syntax"
+-version = "0.8.10"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+-
+ [[package]]
+ name = "reqwest"
+ version = "0.12.28"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
+ dependencies = [
+- "base64 0.22.1",
++ "base64",
+  "bytes",
+  "futures-core",
+  "http",
+@@ -2342,7 +2097,7 @@ version = "0.13.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
+ dependencies = [
+- "base64 0.22.1",
++ "base64",
+  "bytes",
+  "encoding_rs",
+  "futures-channel",
+@@ -2451,7 +2206,7 @@ version = "1.1.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "146c9e247ccc180c1f61615433868c99f3de3ae256a30a43b49f67c2d9171f34"
+ dependencies = [
+- "bitflags 2.10.0",
++ "bitflags",
+  "errno",
+  "libc",
+  "linux-raw-sys",
+@@ -2591,7 +2346,7 @@ version = "3.5.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "b3297343eaf830f66ede390ea39da1d462b6b0c1b000f420d0a83f898bbbe6ef"
+ dependencies = [
+- "bitflags 2.10.0",
++ "bitflags",
+  "core-foundation 0.10.1",
+  "core-foundation-sys",
+  "libc",
+@@ -2677,6 +2432,17 @@ dependencies = [
+  "zmij",
+ ]
+ 
++[[package]]
++name = "serde_path_to_error"
++version = "0.1.20"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
++dependencies = [
++ "itoa",
++ "serde",
++ "serde_core",
++]
++
+ [[package]]
+ name = "serde_spanned"
+ version = "0.6.9"
+@@ -2727,10 +2493,10 @@ version = "6.3.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "420c6c161b5d6883d8195584a802b114af6c884ed56d937d994e30f7f81d54ec"
+ dependencies = [
+- "base64 0.22.1",
++ "base64",
+  "bincode 2.0.1",
+- "bitfield 0.19.4",
+- "bitflags 2.10.0",
++ "bitfield",
++ "bitflags",
+  "byteorder",
+  "codicon",
+  "dirs",
+@@ -2749,35 +2515,14 @@ dependencies = [
+  "x509-cert",
+ ]
+ 
+-[[package]]
+-name = "sev"
+-version = "7.1.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "c2ff74d7e7d1cc172f3a45adec74fbeee928d71df095b85aaaf66eb84e1e31e6"
+-dependencies = [
+- "base64 0.22.1",
+- "bitfield 0.19.4",
+- "bitflags 2.10.0",
+- "byteorder",
+- "dirs",
+- "hex",
+- "iocuddle",
+- "lazy_static",
+- "libc",
+- "openssl",
+- "rdrand",
+- "static_assertions",
+- "uuid",
+-]
+-
+ [[package]]
+ name = "sev"
+ version = "7.1.0"
+ source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e12c8"
+ dependencies = [
+- "base64 0.22.1",
+- "bitfield 0.19.4",
+- "bitflags 2.10.0",
++ "base64",
++ "bitfield",
++ "bitflags",
+  "byteorder",
+  "dirs",
+  "hex",
+@@ -2949,7 +2694,7 @@ version = "0.7.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "a13f3d0daba03132c0aa9767f98351b3488edc2c100cda2d2ec2b04f3d8d3c8b"
+ dependencies = [
+- "bitflags 2.10.0",
++ "bitflags",
+  "core-foundation 0.9.4",
+  "system-configuration-sys",
+ ]
+@@ -2991,10 +2736,15 @@ dependencies = [
+ ]
+ 
+ [[package]]
+-name = "target-lexicon"
+-version = "0.12.16"
++name = "tar"
++version = "0.4.45"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
++checksum = "22692a6476a21fa75fdfc11d452fda482af402c008cdbaf3476414e122040973"
++dependencies = [
++ "filetime",
++ "libc",
++ "xattr",
++]
+ 
+ [[package]]
+ name = "tempfile"
+@@ -3250,6 +3000,7 @@ dependencies = [
+  "tokio",
+  "tower-layer",
+  "tower-service",
++ "tracing",
+ ]
+ 
+ [[package]]
+@@ -3258,7 +3009,7 @@ version = "0.6.8"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "d4e6559d53cc268e5031cd8429d05415bc4cb4aefc4aa5d6cc35fbf5b924a1f8"
+ dependencies = [
+- "bitflags 2.10.0",
++ "bitflags",
+  "bytes",
+  "futures-util",
+  "http",
+@@ -3288,6 +3039,7 @@ version = "0.1.44"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
+ dependencies = [
++ "log",
+  "pin-project-lite",
+  "tracing-attributes",
+  "tracing-core",
+@@ -3346,39 +3098,6 @@ version = "0.2.5"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+ 
+-[[package]]
+-name = "tss-esapi"
+-version = "7.6.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "78ea9ccde878b029392ac97b5be1f470173d06ea41d18ad0bb3c92794c16a0f2"
+-dependencies = [
+- "bitfield 0.14.0",
+- "enumflags2",
+- "getrandom 0.2.17",
+- "hostname-validator",
+- "log",
+- "mbox",
+- "num-derive",
+- "num-traits",
+- "oid",
+- "picky-asn1",
+- "picky-asn1-x509",
+- "regex",
+- "serde",
+- "tss-esapi-sys",
+- "zeroize",
+-]
+-
+-[[package]]
+-name = "tss-esapi-sys"
+-version = "0.5.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "535cd192581c2ec4d5f82e670b1d3fbba6a23ccce8c85de387642051d7cad5b5"
+-dependencies = [
+- "pkg-config",
+- "target-lexicon",
+-]
+-
+ [[package]]
+ name = "typenum"
+ version = "1.19.0"
+@@ -3453,34 +3172,6 @@ version = "0.0.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+ 
+-[[package]]
+-name = "ureq"
+-version = "3.2.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "fdc97a28575b85cfedf2a7e7d3cc64b3e11bd8ac766666318003abbacc7a21fc"
+-dependencies = [
+- "base64 0.22.1",
+- "cookie_store",
+- "log",
+- "percent-encoding",
+- "serde",
+- "serde_json",
+- "ureq-proto",
+- "utf-8",
+-]
+-
+-[[package]]
+-name = "ureq-proto"
+-version = "0.5.3"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "d81f9efa9df032be5934a46a068815a10a042b494b6a58cb0a1a97bb5467ed6f"
+-dependencies = [
+- "base64 0.22.1",
+- "http",
+- "httparse",
+- "log",
+-]
+-
+ [[package]]
+ name = "url"
+ version = "2.5.8"
+@@ -3493,12 +3184,6 @@ dependencies = [
+  "serde",
+ ]
+ 
+-[[package]]
+-name = "utf-8"
+-version = "0.7.6"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
+-
+ [[package]]
+ name = "utf8_iter"
+ version = "1.0.4"
+@@ -3687,7 +3372,7 @@ version = "0.244.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe"
+ dependencies = [
+- "bitflags 2.10.0",
++ "bitflags",
+  "hashbrown 0.15.5",
+  "indexmap",
+  "semver",
+@@ -4121,7 +3806,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "9d66ea20e9553b30172b5e831994e35fbde2d165325bec84fc43dbf6f4eb9cb2"
+ dependencies = [
+  "anyhow",
+- "bitflags 2.10.0",
++ "bitflags",
+  "indexmap",
+  "log",
+  "serde",
+@@ -4187,19 +3872,20 @@ dependencies = [
+ ]
+ 
+ [[package]]
+-name = "yansi"
+-version = "1.0.1"
++name = "xattr"
++version = "1.6.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
++checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
++dependencies = [
++ "libc",
++ "rustix",
++]
+ 
+ [[package]]
+-name = "yasna"
+-version = "0.4.0"
++name = "yansi"
++version = "1.0.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "e262a29d0e61ccf2b6190d7050d4b237535fc76ce4c1210d9caa316f71dffa75"
+-dependencies = [
+- "num-bigint",
+-]
++checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
+ 
+ [[package]]
+ name = "yoke"
+diff --git a/Cargo.toml b/Cargo.toml
+index a281bbb..537081e 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -6,7 +6,7 @@ repository = "https://github.com/lunal-dev/kettle"
+ build = "build.rs"
+ 
+ [features]
+-attest = ["attestation/attest"]
++attest = ["attestation/attest", "attestation/snp"]
+ 
+ [dependencies]
+ anyhow = "1.0.101"
+@@ -32,6 +32,8 @@ ecdsa = { version = "0.16.9", features = [
+     "verifying",
+ ] }
+ flate2 = "1.1.9"
++tar = "0.4"
++axum = "0.8"
+ fs-err = "3.3.0"
+ hex = "0.4.3"
+ memoffset = "0.9.1"
+@@ -58,7 +60,7 @@ thiserror = "2.0.18"
+ x509-cert = { version = "0.2.5", features = ["std"] }
+ uuid = { version = "1.21.0", features = ["v4"] }
+ rs_merkle = "1.5.0"
+-attestation = { git = "https://github.com/lunal-dev/attestation-rs", branch = "feat/new-attestation-lib", version = "0.1.0" }
++attestation = { path = "../attestation-rs", default-features = false }
+ tokio = { version = "1.49.0", features = ["rt-multi-thread"] }
+ tracing = "0.1.44"
+ clap-verbosity-flag = { version = "3.0.4", default-features = false, features = [
+@@ -69,6 +71,11 @@ shadow-rs = { version = "1.7.1", default-features = false }
+ serde_yaml = "0.9.34"
+ pretty_assertions = "1.4.1"
+ 
++[[bin]]
++name = "kettle-server"
++path = "src/bin/kettle-server.rs"
++required-features = ["attest"]
++
+ [dev-dependencies]
+ tempfile = "3"
+ regex-lite = "0.1"
+diff --git a/src/bin/kettle-server.rs b/src/bin/kettle-server.rs
+new file mode 100644
+index 0000000..2e65a86
+--- /dev/null
++++ b/src/bin/kettle-server.rs
+@@ -0,0 +1,162 @@
++use axum::body::Bytes;
++use axum::extract::State;
++use axum::http::{HeaderMap, StatusCode};
++use axum::routing::{get, post};
++use axum::Router;
++use flate2::read::GzDecoder;
++use flate2::write::GzEncoder;
++use flate2::Compression;
++use std::path::PathBuf;
++use std::sync::Arc;
++use tokio::sync::Mutex;
++
++use kettle::commands;
++
++struct AppState {
++    busy: Mutex<bool>,
++}
++
++#[tokio::main]
++async fn main() {
++    let port: u16 = std::env::var("KETTLE_PORT")
++        .ok()
++        .and_then(|p| p.parse().ok())
++        .unwrap_or(8080);
++
++    let state = Arc::new(AppState {
++        busy: Mutex::new(false),
++    });
++
++    let app = Router::new()
++        .route("/health", get(health))
++        .route("/build", post(build_handler))
++        .with_state(state);
++
++    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
++        .await
++        .expect("failed to bind");
++
++    eprintln!("kettle-server listening on 0.0.0.0:{port}");
++    axum::serve(listener, app).await.expect("server error");
++}
++
++async fn health() -> &'static str {
++    "ok"
++}
++
++async fn build_handler(
++    State(state): State<Arc<AppState>>,
++    headers: HeaderMap,
++    body: Bytes,
++) -> Result<(StatusCode, [(&'static str, &'static str); 1], Vec<u8>), (StatusCode, String)> {
++    let mut busy = state.busy.lock().await;
++    if *busy {
++        return Err((StatusCode::SERVICE_UNAVAILABLE, "busy".to_string()));
++    }
++    *busy = true;
++
++    let result = do_build(&headers, &body).await;
++
++    *busy = false;
++    result
++}
++
++async fn do_build(
++    headers: &HeaderMap,
++    body: &Bytes,
++) -> Result<(StatusCode, [(&'static str, &'static str); 1], Vec<u8>), (StatusCode, String)> {
++    let nonce_hex = headers
++        .get("x-nonce")
++        .and_then(|v| v.to_str().ok())
++        .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing X-Nonce header".to_string()))?;
++
++    let nonce_bytes = hex::decode(nonce_hex)
++        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid nonce hex: {e}")))?;
++
++    if nonce_bytes.len() > 32 {
++        return Err((
++            StatusCode::BAD_REQUEST,
++            "nonce must be at most 32 bytes".to_string(),
++        ));
++    }
++
++    // Create work directory
++    let work_id = uuid::Uuid::new_v4();
++    let work_dir = PathBuf::from(format!("/tmp/kettle-work-{work_id}"));
++    std::fs::create_dir_all(&work_dir)
++        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("mkdir: {e}")))?;
++
++    // Extract tarball
++    let gz = GzDecoder::new(body.as_ref());
++    let mut archive = tar::Archive::new(gz);
++    archive.unpack(&work_dir)
++        .map_err(|e| (StatusCode::BAD_REQUEST, format!("bad archive: {e}")))?;
++
++    // Find project dir: if single top-level directory, use that
++    let project_dir = find_project_dir(&work_dir)
++        .map_err(|e| (StatusCode::BAD_REQUEST, format!("bad project layout: {e}")))?;
++
++    // Initialize a git repo if one doesn't exist (tarballs don't include .git)
++    if !project_dir.join(".git").exists() {
++        std::process::Command::new("git")
++            .args(["init"])
++            .current_dir(&project_dir)
++            .output()
++            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("git init: {e}")))?;
++        std::process::Command::new("git")
++            .args(["add", "."])
++            .current_dir(&project_dir)
++            .output()
++            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("git add: {e}")))?;
++        std::process::Command::new("git")
++            .args([
++                "-c", "user.name=kettle",
++                "-c", "user.email=kettle@build",
++                "commit", "-m", "build",
++            ])
++            .current_dir(&project_dir)
++            .output()
++            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("git commit: {e}")))?;
++    }
++
++    // Run attest with nonce
++    commands::attest::attest(&project_dir, Some(&nonce_bytes))
++        .await
++        .map_err(|e| (StatusCode::CONFLICT, format!("build failed: {e}")))?;
++
++    // Tar up kettle-build/ directory as response
++    let kettle_build_dir = project_dir.join("kettle-build");
++    let mut result_buf = Vec::new();
++    {
++        let enc = GzEncoder::new(&mut result_buf, Compression::fast());
++        let mut builder = tar::Builder::new(enc);
++        builder.append_dir_all(".", &kettle_build_dir)
++            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("tar result: {e}")))?;
++        let enc = builder.into_inner()
++            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("tar finish: {e}")))?;
++        enc.finish()
++            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("gz finish: {e}")))?;
++    }
++
++    // Cleanup
++    let _ = std::fs::remove_dir_all(&work_dir);
++
++    Ok((
++        StatusCode::OK,
++        [("content-type", "application/gzip")],
++        result_buf,
++    ))
++}
++
++fn find_project_dir(work_dir: &PathBuf) -> Result<PathBuf, String> {
++    let entries: Vec<_> = std::fs::read_dir(work_dir)
++        .map_err(|e| e.to_string())?
++        .filter_map(|e| e.ok())
++        .collect();
++
++    if entries.len() == 1 && entries[0].file_type().map(|t| t.is_dir()).unwrap_or(false) {
++        return Ok(entries[0].path());
++    }
++
++    Ok(work_dir.clone())
++}
+diff --git a/src/commands/attest.rs b/src/commands/attest.rs
+index bf2b858..be0cae2 100644
+--- a/src/commands/attest.rs
++++ b/src/commands/attest.rs
+@@ -2,13 +2,14 @@ use anyhow::Result;
+ use std::path::PathBuf;
+ 
+ #[cfg(all(feature = "attest", target_os = "linux"))]
+-pub async fn attest(path: &PathBuf) -> Result<()> {
++pub async fn attest(path: &PathBuf, nonce: Option<&[u8]>) -> Result<()> {
+     use crate::provenance::Provenance;
+ 
+     // Build the thing from scratch before we attest it
+     crate::commands::build::build(path)?;
+ 
+-    let platform = attestation::detect().expect("no TEE platform detected");
++    let platform = attestation::detect()
++        .map_err(|e| anyhow::anyhow!("no TEE platform detected: {e}"))?;
+     println!("Running on platform: {}", platform);
+ 
+     let provenance_bytes = fs_err::read(path.join("kettle-build/provenance.json"))?;
+@@ -19,10 +20,26 @@ pub async fn attest(path: &PathBuf) -> Result<()> {
+         hex::encode(&provenance_checksum)
+     );
+ 
+-    let evidence_json = attestation::attest(platform, provenance_checksum.as_slice())
++    // Construct 64-byte report_data:
++    //   [0:32]  = SHA256(provenance.json) — binds evidence to build output
++    //   [32:64] = caller nonce            — proves freshness (anti-replay)
++    let mut report_data = vec![0u8; 64];
++    report_data[..32].copy_from_slice(&provenance_checksum);
++    if let Some(n) = nonce {
++        let len = n.len().min(32);
++        report_data[32..32 + len].copy_from_slice(&n[..len]);
++        println!("Nonce bound into attestation report_data[32:64]");
++    }
++
++    let evidence_json = attestation::attest(platform, &report_data)
+         .await
+-        .expect("attestation failed");
+-    fs_err::write(path.join("kettle-build/evidence.json"), evidence_json)?;
++        .map_err(|e| anyhow::anyhow!("attestation failed: {e}"))?;
++    fs_err::write(path.join("kettle-build/evidence.json"), &evidence_json)?;
++
++    // Write nonce alongside evidence so verifiers know what to check
++    if let Some(n) = nonce {
++        fs_err::write(path.join("kettle-build/nonce"), n)?;
++    }
+ 
+     println!("Attestation complete! Evidence written to file `evidence.json`");
+ 
+@@ -30,7 +47,7 @@ pub async fn attest(path: &PathBuf) -> Result<()> {
+ }
+ 
+ #[cfg(not(all(feature = "attest", target_os = "linux")))]
+-pub async fn attest(_path: &PathBuf) -> Result<()> {
++pub async fn attest(_path: &PathBuf, _nonce: Option<&[u8]>) -> Result<()> {
+     use anyhow::anyhow;
+     Err(anyhow!(
+         "Attestation is disabled. Rebuild Kettle with `--features attest` to enable this command."
+diff --git a/src/commands/verify.rs b/src/commands/verify.rs
+index fb7962f..ca26344 100644
+--- a/src/commands/verify.rs
++++ b/src/commands/verify.rs
+@@ -23,6 +23,9 @@ pub async fn verify(path: &PathBuf) -> Result<()> {
+     results.push(verify_signature(&verification));
+     results.push(provenance.verify_predicate());
+     results.push(verify_report_data(&verification, &provenance));
++    if let Some(ref nonce) = build.nonce {
++        results.push(verify_nonce(&verification, nonce));
++    }
+     results.extend(provenance.verify_artifacts(&build.artifacts)?);
+ 
+     // Print build information
+@@ -104,6 +107,36 @@ fn verify_signature(verification_result: &VerificationResult) -> Verification {
+     }
+ }
+ 
++fn verify_nonce(
++    verification_result: &VerificationResult,
++    nonce: &[u8],
++) -> Verification {
++    let report_data = &verification_result.claims.report_data;
++    // Nonce is stored at report_data[32:64]
++    if report_data.len() < 64 {
++        return Verification::failure(
++            "Nonce verification failed",
++            "report_data too short to contain nonce",
++        );
++    }
++    let mut expected_nonce_padded = [0u8; 32];
++    let len = nonce.len().min(32);
++    expected_nonce_padded[..len].copy_from_slice(&nonce[..len]);
++
++    if report_data[32..64] == expected_nonce_padded {
++        Verification::success("Nonce freshness binding valid")
++    } else {
++        Verification::failure(
++            "Nonce freshness binding mismatch",
++            &format!(
++                "Expected nonce bytes: {}\nActual report_data[32:64]: {}",
++                hex::encode(&expected_nonce_padded),
++                hex::encode(&report_data[32..64]),
++            ),
++        )
++    }
++}
++
+ fn verify_report_data(
+     verification_result: &VerificationResult,
+     provenance: &Provenance,
+@@ -111,13 +144,21 @@ fn verify_report_data(
+     let signed_data = &verification_result.claims.signed_data;
+     let checksum = provenance.checksum();
+ 
+-    match *signed_data == checksum {
++    // signed_data may be 64 bytes (provenance hash || nonce) — compare first 32
++    let provenance_portion = if signed_data.len() >= 32 {
++        &signed_data[..32]
++    } else {
++        signed_data
++    };
++
++    match provenance_portion == checksum {
+         true => Verification::success("Provenance checksum match"),
+         false => Verification::failure(
+             "Provenance checksum mismatch",
+             &format!(
+-                "Expected provenance.json checksum {:?}\nActual provenance.json checksum   {:?}",
+-                signed_data, checksum
++                "Expected provenance.json checksum {}\nActual report_data[0:32]          {}",
++                hex::encode(&checksum),
++                hex::encode(provenance_portion),
+             ),
+         ),
+     }
+@@ -127,6 +168,7 @@ struct Build {
+     provenance_bytes: Vec<u8>,
+     evidence_bytes: Vec<u8>,
+     artifacts: Vec<DirEntry>,
++    nonce: Option<Vec<u8>>,
+ }
+ 
+ impl Build {
+@@ -137,11 +179,13 @@ impl Build {
+         let artifacts = fs_err::read_dir(project_dir.join("artifacts"))?
+             .filter_map(|e| e.ok())
+             .collect();
++        let nonce = fs_err::read(project_dir.join("nonce")).ok();
+ 
+         let build = Build {
+             provenance_bytes,
+             evidence_bytes,
+             artifacts,
++            nonce,
+         };
+ 
+         Ok(build)
+@@ -209,11 +253,14 @@ mod tests {
+                     tee: 0,
+                     snp: 0,
+                     microcode: 0,
++                    fmc: None,
+                 },
+                 platform_data: Default::default(),
+             },
+             report_data_match: None,
+             init_data_match: None,
++            collateral_verified: false,
++            tcb_status: None,
+         }
+     }
+ 
+diff --git a/src/main.rs b/src/main.rs
+index 7502191..75a2dcd 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -36,12 +36,17 @@ enum Commands {
+     Attest {
+         #[arg()]
+         path: PathBuf,
++        /// Hex-encoded nonce for freshness binding (up to 32 bytes)
++        #[arg(long)]
++        nonce: Option<String>,
+     },
+     #[cfg(not(all(feature = "attest", target_os = "linux")))]
+     #[command(hide = true)]
+     Attest {
+         #[arg(default_value = ".")]
+         path: PathBuf,
++        #[arg(long)]
++        nonce: Option<String>,
+     },
+     /// Build a project with SLSA v1.2 provenance
+     Build {
+@@ -67,7 +72,10 @@ async fn main() {
+ 
+     debug!("got args: {:?}", args);
+     let result = match args.command {
+-        Commands::Attest { ref path } => commands::attest::attest(path).await,
++        Commands::Attest { ref path, ref nonce } => {
++            let nonce_bytes = nonce.as_ref().map(|h| hex::decode(h).expect("invalid hex nonce"));
++            commands::attest::attest(path, nonce_bytes.as_deref()).await
++        }
+         Commands::Build { ref path } => commands::build::build(path),
+         Commands::Verify { ref path } => commands::verify::verify(path).await,
+     };
+diff --git a/src/toolchain/cargo.rs b/src/toolchain/cargo.rs
+index 4b5f46a..9ee0d24 100644
+--- a/src/toolchain/cargo.rs
++++ b/src/toolchain/cargo.rs
+@@ -83,9 +83,11 @@ impl ToolchainDriver for CargoInputs {
+             .output()
+             .context("failed to spawn cargo")?;
+         if !output.status.success() {
++            let stderr = String::from_utf8_lossy(&output.stderr);
+             return Err(anyhow!(
+-                "cargo build failed (exit {:?})",
+-                output.status.code()
++                "cargo build failed (exit {:?}): {}",
++                output.status.code(),
++                stderr.chars().take(4000).collect::<String>()
+             ));
+         }
+         Ok(BuildOutput {
+diff --git a/src/toolchain/driver.rs b/src/toolchain/driver.rs
+index e2ef018..8709700 100644
+--- a/src/toolchain/driver.rs
++++ b/src/toolchain/driver.rs
+@@ -130,7 +130,6 @@ pub(crate) struct ToolBinaryInfo {
+ }
+ 
+ impl ToolBinaryInfo {
+-    /// For rustup-managed tools (rustc, cargo): locate via `rustup which`, fall back to `which`.
+     pub(crate) fn via_rustup(cmd: &str) -> Result<Self> {
+         let ver = Command::new(cmd)
+             .arg("--version")
+@@ -138,16 +137,10 @@ impl ToolBinaryInfo {
+             .with_context(|| format!("{cmd} not found"))?;
+         let version = String::from_utf8(ver.stdout)?.trim().to_string();
+ 
+-        let mut which = Command::new("rustup")
++        let which = Command::new("rustup")
+             .args(["which", cmd])
+             .output()
+-            .with_context(|| format!("rustup which {cmd} failed"))?;
+-        if which.stdout.is_empty() {
+-            which = Command::new("which")
+-                .arg(cmd)
+-                .output()
+-                .with_context(|| format!("which {cmd} failed"))?;
+-        }
++            .with_context(|| format!("could not locate {cmd}"))?;
+         let bin = PathBuf::from(String::from_utf8(which.stdout)?.trim().to_string());
+         let sha256 = hex::encode(Sha256::digest(fs_err::read(&bin)?));
+         Ok(Self { version, sha256 })
+@@ -446,10 +439,10 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn git_context_not_a_repo() {
++    fn git_context_not_a_repo_errors() {
+         let tmp = TempDir::new().unwrap();
+         let result = GitContext::from_dir(&tmp.path().to_path_buf());
+-        assert!(result.is_err());
++        assert!(result.is_err(), "should error when not in a git repo");
+     }
+ 
+     // --- ToolBinaryInfo ---

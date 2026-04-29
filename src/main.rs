@@ -36,12 +36,17 @@ enum Commands {
     Attest {
         #[arg()]
         path: PathBuf,
+        /// Hex-encoded nonce for freshness binding (up to 32 bytes)
+        #[arg(long)]
+        nonce: Option<String>,
     },
     #[cfg(not(all(feature = "attest", target_os = "linux")))]
     #[command(hide = true)]
     Attest {
         #[arg(default_value = ".")]
         path: PathBuf,
+        #[arg(long)]
+        nonce: Option<String>,
     },
     /// Build a project with SLSA v1.2 provenance
     Build {
@@ -67,7 +72,10 @@ async fn main() {
 
     debug!("got args: {:?}", args);
     let result = match args.command {
-        Commands::Attest { ref path } => commands::attest::attest(path).await,
+        Commands::Attest { ref path, ref nonce } => {
+            let nonce_bytes = nonce.as_ref().map(|h| hex::decode(h).expect("invalid hex nonce"));
+            commands::attest::attest(path, nonce_bytes.as_deref()).await
+        }
         Commands::Build { ref path } => commands::build::build(path),
         Commands::Verify { ref path } => commands::verify::verify(path).await,
     };

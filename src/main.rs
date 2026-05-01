@@ -31,27 +31,17 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Build and attest a project inside a Trusted Execution Environment
-    #[cfg(all(feature = "attest", target_os = "linux"))]
-    Attest {
-        #[arg()]
-        path: PathBuf,
-    },
-    #[cfg(not(all(feature = "attest", target_os = "linux")))]
-    #[command(hide = true)]
-    Attest {
-        #[arg(default_value = ".")]
-        path: PathBuf,
-    },
+    /// Build and attest a project inside a Trusted Execution Environment.
+    Attest(commands::attest::AttestArgs),
     /// Build a project with SLSA v1.2 provenance
     Build {
-        /// Path to the Cargo or Nix project
+        /// Path to the project to be built
         #[arg()]
         path: PathBuf,
     },
     /// Verify a Kettle build, including provenance and attestation
     Verify {
-        /// Path to directory containing provenance.json and evidence.b64
+        /// Path to directory containing provenance.json and evidence.json
         #[arg(default_value = ".")]
         path: PathBuf,
     },
@@ -67,7 +57,7 @@ async fn main() {
 
     debug!("got args: {:?}", args);
     let result = match args.command {
-        Commands::Attest { ref path } => commands::attest::attest(path).await,
+        Commands::Attest(args) => commands::attest::attest(args).await,
         Commands::Build { ref path } => commands::build::build(path),
         Commands::Verify { ref path } => commands::verify::verify(path).await,
     };

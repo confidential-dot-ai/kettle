@@ -1,8 +1,16 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
+#[derive(clap::Args, Debug)]
+pub struct AttestArgs {
+    /// Path to the project to be built and attested
+    #[arg()]
+    path: PathBuf,
+}
+
 #[cfg(all(feature = "attest", target_os = "linux"))]
-pub async fn attest(path: &PathBuf) -> Result<()> {
+pub async fn attest(args: AttestArgs) -> Result<()> {
+    let path = &args.path;
     use crate::provenance::Provenance;
 
     // Build the thing from scratch before we attest it
@@ -30,7 +38,7 @@ pub async fn attest(path: &PathBuf) -> Result<()> {
 }
 
 #[cfg(not(all(feature = "attest", target_os = "linux")))]
-pub async fn attest(_path: &PathBuf) -> Result<()> {
+pub async fn attest(_args: AttestArgs) -> Result<()> {
     use anyhow::anyhow;
     Err(anyhow!(
         "Attestation is disabled. Rebuild Kettle with `--features attest` to enable this command."

@@ -8,8 +8,8 @@ AZURE_SECURITY_TYPE="$(curl -s -H Metadata:true 'http://169.254.169.254/metadata
 
 if [[ "$AZURE_SECURITY_TYPE" == "ConfidentialVM" ]]; then
   set +x
-  cargo run --release --features attest -- "$@"
+  cargo run --features attest -- "$@"
 else
   set +x
-  cargo run --release -- "$@"
+  cargo run -- "$@"
 fi

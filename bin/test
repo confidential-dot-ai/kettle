@@ -1,11 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+AZURE_SECURITY_TYPE="$(curl -s -H Metadata:true 'http://169.254.169.254/metadata/instance?api-version=2023-07-01' | jq .compute.securityProfile.securityType -r)"
+
 set -x
 
 cargo nextest run "${@:---no-fail-fast}"
 
-if dmesg 2>/dev/null | grep -i -E "snp|tdx|sev"; then
+if [[ "$AZURE_SECURITY_TYPE" == "ConfidentialVM" ]]; then
   cargo nextest run --features attest "${@:---no-fail-fast}"
 else
   echo "no attestation hardware found, skipping TEE tests"

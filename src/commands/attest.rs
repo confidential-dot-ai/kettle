@@ -26,8 +26,11 @@ pub async fn attest(args: AttestArgs) -> Result<()> {
         "Attesting build provenance.json with checksum {}",
         hex::encode(&provenance_checksum)
     );
+    // always put the provenance checksum in the first 32 bytes
+    let mut report_data = [0u8; 48];
+    report_data[..32].copy_from_slice(&provenance_checksum);
 
-    let evidence_json = attestation::attest(platform, provenance_checksum.as_slice())
+    let evidence_json = attestation::attest(platform, report_data.as_slice())
         .await
         .expect("attestation failed");
     fs_err::write(path.join("kettle-build/evidence.json"), evidence_json)?;

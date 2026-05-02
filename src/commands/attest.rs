@@ -49,7 +49,7 @@ pub async fn attest(args: AttestArgs) -> Result<()> {
     };
 
     tracing::debug!("attesting with report_data {}", hex::encode(report_data));
-    let evidence_json = attestation::attest(platform, report_data.as_slice())
+    let evidence_json = attestation::attest(platform, report_data.as_slice(), &Default::default())
         .await
         .expect("attestation failed");
     fs_err::write(path.join("kettle-build/evidence.json"), evidence_json)?;

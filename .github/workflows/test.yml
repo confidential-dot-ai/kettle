@@ -2,11 +2,11 @@ name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
   merge_group:
-    types: [checks_requested]
+    types: [ checks_requested ]
   workflow_dispatch:
 
 permissions: read-all
@@ -79,28 +79,32 @@ jobs:
           if-no-files-found: error
 
   build-projects:
-    needs: [build]
+    needs: [ build ]
     name: Build ${{ matrix.project }} with Kettle
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        project: [ripgrep, eza, openclaw]
+        project: [ ripgrep, eza, openclaw ]
         include:
           - project: ripgrep
             owner: burntsushi
             toolchain: rust
+            ref: 4519153e5e461527f4bca45b042fff45c4ec6fb9
           - project: eza
             owner: eza-community
             toolchain: nix
+            ref: eed27ed05e74542af5852aed40e3dbff87d69c43
           - project: openclaw
             owner: openclaw
             toolchain: pnpm
+            ref: d518260bb8261bb179cfb421a8c166915bb59dd1
     steps:
       - name: Check out ${{ matrix.project }}
         uses: actions/checkout@v6
         with:
           repository: "${{ matrix.owner }}/${{ matrix.project }}"
+          ref: "${{ matrix.ref }}"
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         if: ${{ matrix.toolchain == 'rust' }}
       - uses: cachix/install-nix-action@v31

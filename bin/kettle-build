@@ -13,4 +13,4 @@ set +x
 if [[ ! -d "$DIR" ]]; then
    git clone --depth=1 "https://github.com/$REPO" "$DIR"
 fi
-cargo run --release -- build "$DIR"
+bin/kettle build "$DIR"

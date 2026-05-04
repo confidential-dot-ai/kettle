@@ -209,11 +209,14 @@ mod tests {
                     tee: 0,
                     snp: 0,
                     microcode: 0,
+                    fmc: Some(0),
                 },
                 platform_data: Default::default(),
             },
             report_data_match: None,
             init_data_match: None,
+            collateral_verified: true,
+            tcb_status: None,
         }
     }
 

@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+
+export SOURCE_DATE_EPOCH
+
+set -x
+
+
+mkdir -p target/reproducible
+
+SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct)"
+docker build . -t kettle-reproducible \
+  --platform linux/amd64 \
+  --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+#   --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+#   --target=artifact \
+#   --output "type=local,dest=$(pwd)/target/reproducible/"

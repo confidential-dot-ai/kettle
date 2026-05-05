@@ -58,7 +58,7 @@ thiserror = "2.0.18"
 x509-cert = { version = "0.2.5", features = ["std"] }
 uuid = { version = "1.21.0", features = ["v4"] }
 rs_merkle = "1.5.0"
-attestation = { git = "https://github.com/lunal-dev/attestation-rs", branch = "main", version = "0.4.0", default-features = false }
+attestation = { git = "https://github.com/lunal-dev/attestation-rs", branch = "main", version = "0.4.0" }
 tokio = { version = "1.49.0", features = ["rt-multi-thread"] }
 tracing = "0.1.44"
 clap-verbosity-flag = { version = "3.0.4", default-features = false, features = [

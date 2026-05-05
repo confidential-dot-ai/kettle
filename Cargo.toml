@@ -7,6 +7,7 @@ build = "build.rs"
 
 [features]
 attest = ["attestation/attest"]
+server = ["attest", "dep:axum", "dep:tar"]
 
 [dependencies]
 anyhow = "1.0.101"
@@ -68,6 +69,8 @@ tracing-subscriber = { version = "=0.3.19", features = ["tracing"] }
 shadow-rs = { version = "1.7.1", default-features = false }
 serde_yaml = "0.9.34"
 pretty_assertions = "1.4.1"
+axum = {version = "0.8.9", optional = true}
+tar = {version = "0.4.45", optional = true}
 
 [dev-dependencies]
 tempfile = "3"

@@ -1,5 +1,5 @@
 # Rust 1.94.0
-FROM stagex/pallet-rust@sha256:2fbe7b164dd92edb9c1096152f6d27592d8a69b1b8eb2fc907b5fadea7d11668 AS build
+FROM docker.io/stagex/pallet-rust@sha256:2fbe7b164dd92edb9c1096152f6d27592d8a69b1b8eb2fc907b5fadea7d11668 AS build
 
 
 # Import SOURCE_DATE_EPOCH, which should be set and then provided like this:
@@ -13,12 +13,11 @@ ENV SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH
 WORKDIR /tmp/kettle
 COPY . .
 
-# Run a cargo build that explicitly targets musl, so the binary will be static.
-RUN cargo build --release --locked --target x86_64-unknown-linux-musl
+# Run a cargo build that explicitly targets musl, and links it statically.
+ENV RUSTFLAGS='-C target-feature=+crt-static'
+RUN cargo build --release --locked --target x86_64-unknown-linux-musl --bin kettle
 
 # Copy the binary into a stage named "artifact" so it can be extracted to the host:
 #   docker build . --target=artifact --output "type=local,dest=$(pwd)/out/"
 FROM scratch AS artifact
-COPY --from=build /tmp/kettle/target/release/kettle /kettle
-
-ENTRYPOINT ["/bin/sh"]
+COPY --from=build /tmp/kettle/target/x86_64-unknown-linux-musl/release/kettle /kettle

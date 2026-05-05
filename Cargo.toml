@@ -80,3 +80,8 @@ shadow-rs = "1.7.1"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[patch.crates-io]
+tss-esapi-sys = { path = "crates/tss-esapi-sys" }
+tss-esapi = { path = "crates/tss-esapi" }
+az-cvm-vtpm = { path = "crates/az-cvm-vtpm" }

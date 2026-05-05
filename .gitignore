@@ -1,8 +1,4 @@
-claude.md
-.claudeignore
-.claude/
-
-# Added by cargo
-
-/target
+/crates/*/target
+/crates/*/Cargo.lock
 /kettle-build
+/target

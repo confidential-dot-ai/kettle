@@ -15,6 +15,9 @@ ENV SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH
 WORKDIR /tmp/kettle
 COPY . .
 
+# Tell pkg-config to always run in static mode, needed for libtss2
+ENV PKG_CONFIG_ALL_STATIC=1
+
 # Run a cargo build that explicitly targets musl, and links it statically.
 ENV RUSTFLAGS='-C target-feature=+crt-static'
 RUN cargo build --bin kettle --features attest \

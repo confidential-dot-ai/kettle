@@ -112,21 +112,35 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
 
 fn verify_nonce(verification_result: &VerificationResult, nonce_string: String) -> Verification {
     let nonce = hex::decode(nonce_string).unwrap();
-    let signed_nonce = if 32 < verification_result.claims.signed_data.len() {
-        &[]
-    } else {
-        &verification_result.claims.signed_data[32..]
-    };
-    match signed_nonce == nonce {
-        true => Verification::success("Nonce matches attestation"),
-        false => Verification::failure(
-            "Nonce did not match!",
-            &format!(
-                "Expected attested nonce {:?}\nActual value was        {:?}",
-                hex::encode(nonce),
-                hex::encode(signed_nonce)
+    if let Some(signed_data) = &verification_result.claims.signed_data.split_at_checked(32) {
+        let signed_nonce = signed_data.1;
+
+        tracing::debug!(
+            "signed_nonce {:?} given nonce {:?} equal {}",
+            hex::encode(signed_nonce),
+            hex::encode(&nonce),
+            signed_nonce == nonce
+        );
+
+        match signed_nonce == nonce {
+            true => Verification::success("Nonce matches attestation"),
+            false => Verification::failure(
+                "Nonce mismatch",
+                &format!(
+                    "Expected attested nonce {:?}\nActual value was        {:?}",
+                    hex::encode(nonce),
+                    hex::encode(signed_nonce)
+                ),
             ),
-        ),
+        }
+    } else {
+        Verification::failure(
+            "Nonce missing from attestation",
+            &format!(
+                "No nonce preset in attestation signed data {:?}",
+                hex::encode(&verification_result.claims.signed_data),
+            ),
+        )
     }
 }
 
@@ -344,19 +358,81 @@ mod tests {
     }
 
     #[test]
-    fn verify_signed_data_nonce() {
-        let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        let mut signed_data = provenance.checksum();
-        let mut nonce = hex::decode("4888FFD6D6B849BB893987F413B8ED3B").unwrap();
-        signed_data.append(&mut nonce);
+    fn verify_signed_nonce() {
+        assert_verify_nonce("");
+        assert_verify_nonce("aa");
+        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert_verify_nonce("deadbeefdeadbeefdeadbeefdeadbeef");
+        assert_verify_nonce("43C4EF48E21A45B886B2FA7D7CD0EF59");
+        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert_verify_nonce("00");
+        assert_verify_nonce("000000000000000000000000000000");
+        assert_verify_nonce("00000000000000000000000000000000");
+        assert_verify_nonce("0000000000000000000000000000000000");
+    }
+
+    fn assert_verify_nonce(nonce: &str) {
+        let mut signed_data = vec![0; 32];
+        let mut nonce_bytes = hex::decode(nonce).unwrap();
+        signed_data.append(&mut nonce_bytes);
 
         let vr = make_verification_result(true, signed_data);
-        match verify_provenance(&vr, &provenance) {
+        match verify_nonce(&vr, nonce.to_string()) {
             Verification::Success { message } => {
                 assert!(message.contains("match"), "message: {message}");
             }
             Verification::Failure { message, .. } => panic!("expected success: {message}"),
         }
+    }
+
+    #[test]
+    fn verify_signed_nonce_errors() {
+        assert_verify_nonce_fails(vec![], "", "missing");
+        assert_verify_nonce_fails(vec![0; 3], "", "missing");
+        assert_verify_nonce_fails(vec![0; 31], "", "missing");
+        assert_verify_nonce_fails(vec![0; 33], "", "mismatch");
+        assert_verify_nonce_fails(vec![0; 49], "", "mismatch");
+        assert_verify_nonce_fails(vec![0; 50], "", "mismatch");
+        assert_verify_nonce_fails(vec![0; 51], "", "mismatch");
+        assert_verify_nonce_fails(vec![0; 64], "", "mismatch");
+        assert_verify_nonce_fails(vec![0; 65], "", "mismatch");
+
+        assert_verify_nonce_fails(vec![], "cafe", "missing");
+        assert_verify_nonce_fails(vec![0; 3], "cafe", "missing");
+        assert_verify_nonce_fails(vec![0; 31], "cafe", "missing");
+        assert_verify_nonce_fails(vec![0; 33], "cafe", "mismatch");
+        assert_verify_nonce_fails(vec![0; 49], "cafe", "mismatch");
+        assert_verify_nonce_fails(vec![0; 50], "cafe", "mismatch");
+        assert_verify_nonce_fails(vec![0; 51], "cafe", "mismatch");
+        assert_verify_nonce_fails(vec![0; 64], "cafe", "mismatch");
+        assert_verify_nonce_fails(vec![0; 65], "cafe", "mismatch");
+
+        assert_verify_nonce_fails(vec![0; 50], "aa000000000000000000000000000000", "mismatch");
+    }
+
+    fn assert_verify_nonce_fails(signed_data: Vec<u8>, nonce: &str, needle: &str) {
+        let vr = make_verification_result(true, signed_data);
+        match verify_nonce(&vr, nonce.to_owned()) {
+            Verification::Failure { message, .. } => {
+                assert!(message.contains(needle), "message: {message}");
+            }
+            Verification::Success { .. } => panic!("expected failure"),
+        }
+    }
+
+    #[test]
+    fn verify_signed_checksum_errors() {
+        assert_verify_provenance_fails(vec![], "invalid");
+        assert_verify_provenance_fails(vec![0; 3], "invalid");
+        assert_verify_provenance_fails(vec![0; 31], "invalid");
+        assert_verify_provenance_fails(vec![0; 32], "mismatch");
+        assert_verify_provenance_fails(vec![0; 33], "mismatch");
+        assert_verify_provenance_fails(vec![0; 49], "mismatch");
+        assert_verify_provenance_fails(vec![0; 50], "mismatch");
+        assert_verify_provenance_fails(vec![0; 51], "mismatch");
+        assert_verify_provenance_fails(vec![0; 64], "mismatch");
+        assert_verify_provenance_fails(vec![0; 65], "mismatch");
     }
 
     fn assert_verify_provenance_fails(signed_data: Vec<u8>, needle: &str) {
@@ -368,20 +444,6 @@ mod tests {
             }
             Verification::Success { .. } => panic!("expected failure"),
         }
-    }
-
-    #[test]
-    fn verify_signed_data_mismatch() {
-        assert_verify_provenance_fails(vec![], "invalid");
-        assert_verify_provenance_fails(vec![0; 3], "invalid");
-        assert_verify_provenance_fails(vec![0; 31], "invalid");
-        assert_verify_provenance_fails(vec![0; 32], "mismatch");
-        assert_verify_provenance_fails(vec![0; 33], "mismatch");
-        assert_verify_provenance_fails(vec![0; 49], "mismatch");
-        assert_verify_provenance_fails(vec![0; 50], "mismatch");
-        assert_verify_provenance_fails(vec![0; 51], "mismatch");
-        assert_verify_provenance_fails(vec![0; 64], "mismatch");
-        assert_verify_provenance_fails(vec![0; 65], "mismatch");
     }
 
     // --- Build::from_dir ---

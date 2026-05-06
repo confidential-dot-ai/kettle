@@ -12,8 +12,21 @@ use tracing::info;
 
 use crate::provenance::Provenance;
 
-pub async fn verify(path: &PathBuf) -> Result<()> {
-    let build = Build::from_dir(path)?;
+#[derive(clap::Args, Debug)]
+pub struct VerifyArgs {
+    /// Path to the project to be verified
+    #[arg()]
+    path: PathBuf,
+    /// Optional nonce, as hex string, to be checked against the attestation.
+    /// Can be up to 16 bytes.
+    #[arg(short, long)]
+    nonce: Option<String>,
+}
+
+pub async fn verify(args: VerifyArgs) -> Result<()> {
+    let path = args.path;
+    let nonce = args.nonce;
+    let build = Build::from_dir(&path)?;
 
     // Get the provenance and attestation
     let provenance = Provenance::from_json(&build.provenance_bytes)?;
@@ -22,8 +35,11 @@ pub async fn verify(path: &PathBuf) -> Result<()> {
     let mut results: Vec<Verification> = vec![];
     results.push(verify_signature(&verification));
     results.push(provenance.verify_predicate());
-    results.push(verify_report_data(&verification, &provenance));
+    results.push(verify_provenance(&verification, &provenance));
     results.extend(provenance.verify_artifacts(&build.artifacts)?);
+    if let Some(nonce) = nonce {
+        results.push(verify_nonce(&verification, nonce));
+    }
 
     // Print build information
     print_table(
@@ -94,6 +110,26 @@ pub async fn verify(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+fn verify_nonce(verification_result: &VerificationResult, nonce_string: String) -> Verification {
+    let nonce = hex::decode(nonce_string).unwrap();
+    let signed_nonce = if 32 < verification_result.claims.signed_data.len() {
+        &[]
+    } else {
+        &verification_result.claims.signed_data[32..]
+    };
+    match signed_nonce == nonce {
+        true => Verification::success("Nonce matches attestation"),
+        false => Verification::failure(
+            "Nonce did not match!",
+            &format!(
+                "Expected attested nonce {:?}\nActual value was        {:?}",
+                hex::encode(nonce),
+                hex::encode(signed_nonce)
+            ),
+        ),
+    }
+}
+
 fn verify_signature(verification_result: &VerificationResult) -> Verification {
     match verification_result.signature_valid {
         true => Verification::success("Attestation hardware signature valid"),
@@ -104,22 +140,51 @@ fn verify_signature(verification_result: &VerificationResult) -> Verification {
     }
 }
 
-fn verify_report_data(
+fn verify_provenance(
     verification_result: &VerificationResult,
     provenance: &Provenance,
 ) -> Verification {
-    let signed_data = &verification_result.claims.signed_data;
-    let checksum = provenance.checksum();
+    if let Some(signed_data) = &verification_result.claims.signed_data.split_at_checked(32) {
+        let signed_checksum = signed_data.0;
+        if signed_checksum.len() != 32 {
+            return Verification::Failure {
+                message: "Attested checksum invalid".to_string(),
+                details: format!(
+                    "Expected attestation checksum {:?} to be 32 bytes",
+                    signed_checksum
+                ),
+            };
+        }
 
-    match *signed_data == checksum {
-        true => Verification::success("Provenance checksum match"),
-        false => Verification::failure(
-            "Provenance checksum mismatch",
-            &format!(
-                "Expected provenance.json checksum {:?}\nActual provenance.json checksum   {:?}",
-                signed_data, checksum
+        let checksum = provenance.checksum();
+        if checksum.len() != 32 {
+            return Verification::Failure {
+                message: "Provenance checksum invalid".to_string(),
+                details: format!(
+                    "Expected provenance.json checksum {:?} to be 32 bytes",
+                    checksum
+                ),
+            };
+        }
+
+        match signed_checksum == checksum {
+            true => Verification::success("Provenance checksum match"),
+            false => Verification::failure(
+                "Provenance checksum mismatch",
+                &format!(
+                    "Expected provenance.json checksum {:?}\nActual provenance.json checksum   {:?}",
+                    signed_data, checksum
+                ),
             ),
-        ),
+        }
+    } else {
+        Verification::Failure {
+            message: "Signed data invalid".to_owned(),
+            details: format!(
+                "Expected signed data {:?} to be at least 32 bytes",
+                &verification_result.claims.signed_data
+            ),
+        }
     }
 }
 
@@ -270,7 +335,7 @@ mod tests {
         let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
         let signed_data = provenance.checksum();
         let vr = make_verification_result(true, signed_data);
-        match verify_report_data(&vr, &provenance) {
+        match verify_provenance(&vr, &provenance) {
             Verification::Success { message } => {
                 assert!(message.contains("match"), "message: {message}");
             }
@@ -279,29 +344,44 @@ mod tests {
     }
 
     #[test]
-    fn verify_signed_data_mismatch() {
+    fn verify_signed_data_nonce() {
         let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        let signed_data = vec![0, 0, 0];
+        let mut signed_data = provenance.checksum();
+        let mut nonce = hex::decode("4888FFD6D6B849BB893987F413B8ED3B").unwrap();
+        signed_data.append(&mut nonce);
+
         let vr = make_verification_result(true, signed_data);
-        match verify_report_data(&vr, &provenance) {
+        match verify_provenance(&vr, &provenance) {
+            Verification::Success { message } => {
+                assert!(message.contains("match"), "message: {message}");
+            }
+            Verification::Failure { message, .. } => panic!("expected success: {message}"),
+        }
+    }
+
+    fn assert_verify_provenance_fails(signed_data: Vec<u8>, needle: &str) {
+        let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
+        let vr = make_verification_result(true, signed_data);
+        match verify_provenance(&vr, &provenance) {
             Verification::Failure { message, .. } => {
-                assert!(message.contains("mismatch"), "message: {message}");
+                assert!(message.contains(needle), "message: {message}");
             }
             Verification::Success { .. } => panic!("expected failure"),
         }
     }
 
     #[test]
-    fn verify_signed_data_absent() {
-        let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        let signed_data = vec![];
-        let vr = make_verification_result(true, signed_data);
-        match verify_report_data(&vr, &provenance) {
-            Verification::Failure { message, .. } => {
-                assert!(message.contains("mismatch"), "message: {message}");
-            }
-            Verification::Success { .. } => panic!("expected failure"),
-        }
+    fn verify_signed_data_mismatch() {
+        assert_verify_provenance_fails(vec![], "invalid");
+        assert_verify_provenance_fails(vec![0; 3], "invalid");
+        assert_verify_provenance_fails(vec![0; 31], "invalid");
+        assert_verify_provenance_fails(vec![0; 32], "mismatch");
+        assert_verify_provenance_fails(vec![0; 33], "mismatch");
+        assert_verify_provenance_fails(vec![0; 49], "mismatch");
+        assert_verify_provenance_fails(vec![0; 50], "mismatch");
+        assert_verify_provenance_fails(vec![0; 51], "mismatch");
+        assert_verify_provenance_fails(vec![0; 64], "mismatch");
+        assert_verify_provenance_fails(vec![0; 65], "mismatch");
     }
 
     // --- Build::from_dir ---

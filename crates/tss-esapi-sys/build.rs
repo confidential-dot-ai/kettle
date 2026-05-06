@@ -26,6 +26,7 @@ fn main() {
 
         let target = Triple::from_str(&std::env::var("TARGET").unwrap())
             .expect("Failed to parse target triple");
+        let is_linux = matches!(target.operating_system, OperatingSystem::Linux);
         match (target.architecture, target.operating_system) {
             (Architecture::Arm(_), OperatingSystem::Linux) => {}
             (Architecture::Aarch64(_), OperatingSystem::Linux) => {}
@@ -52,6 +53,17 @@ fn main() {
             .atleast_version(MINIMUM_VERSION)
             .probe("tss2-mu")
             .expect("Failed to find tss2-mu library.");
+        // Linked so callers can call Tss2_Tcti_Device_Init directly and
+        // bypass the dlopen-based tctildr loader, which doesn't work in a
+        // statically-linked glibc binary. The Device TCTI is Linux-only —
+        // /dev/tpm0 doesn't exist elsewhere — so don't require the .pc on
+        // platforms that don't ship it.
+        if is_linux {
+            pkg_config::Config::new()
+                .atleast_version(MINIMUM_VERSION)
+                .probe("tss2-tcti-device")
+                .expect("Failed to find tss2-tcti-device library.");
+        }
 
         println!("cargo:version={}", tss2_esys.version);
     }

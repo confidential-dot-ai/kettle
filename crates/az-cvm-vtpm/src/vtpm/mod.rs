@@ -17,7 +17,6 @@ use tss_esapi::structures::{
     Attest, AttestInfo, Data, DigestValues, MaxNvBuffer, NvPublicBuilder, Signature,
     SignatureScheme,
 };
-use tss_esapi::tcti_ldr::{DeviceConfig, TctiNameConf};
 use tss_esapi::traits::{Marshall, UnMarshall};
 use tss_esapi::Context;
 
@@ -121,8 +120,8 @@ pub fn get_report_with_report_data(report_data: &[u8]) -> Result<Vec<u8>, Report
 }
 
 fn get_session_context() -> Result<Context, ReportError> {
-    let conf: TctiNameConf = TctiNameConf::Device(DeviceConfig::default());
-    let mut context = Context::new(conf)?;
+    // Bypass tctildr to avoid dlopen — see kettle's tss-esapi patch.
+    let mut context = Context::new_device_direct(std::path::Path::new("/dev/tpm0"))?;
     let auth_session = AuthSession::Password;
     context.set_sessions((Some(auth_session), None, None));
     Ok(context)
@@ -223,8 +222,8 @@ pub fn extend_pcr(pcr: u8, digest: &[u8; 32]) -> Result<(), ExtendError> {
     let sha256_digest = digest.to_vec().try_into()?;
     vals.set(HashingAlgorithm::Sha256, sha256_digest);
 
-    let conf: TctiNameConf = TctiNameConf::Device(DeviceConfig::default());
-    let mut context = Context::new(conf)?;
+    // Bypass tctildr to avoid dlopen — see kettle's tss-esapi patch.
+    let mut context = Context::new_device_direct(std::path::Path::new("/dev/tpm0"))?;
 
     let auth_session = AuthSession::Password;
     context.set_sessions((Some(auth_session), None, None));
@@ -261,8 +260,8 @@ impl PublicKey {
 
 /// Get the AK pub of the vTPM
 pub fn get_ak_pub() -> Result<PublicKey, AKPubError> {
-    let conf: TctiNameConf = TctiNameConf::Device(DeviceConfig::default());
-    let mut context = Context::new(conf)?;
+    // Bypass tctildr to avoid dlopen — see kettle's tss-esapi patch.
+    let mut context = Context::new_device_direct(std::path::Path::new("/dev/tpm0"))?;
     let tpm_handle: TpmHandle = VTPM_AK_HANDLE.try_into()?;
     let key_handle = context.tr_from_tpm_public(tpm_handle)?;
     let (pk, _, _) = context.read_public(key_handle.into())?;
@@ -338,8 +337,8 @@ pub fn get_quote(data: &[u8]) -> Result<Quote, QuoteError> {
     if data.len() > Data::MAX_SIZE {
         return Err(QuoteError::DataTooLarge);
     }
-    let conf: TctiNameConf = TctiNameConf::Device(DeviceConfig::default());
-    let mut context = Context::new(conf)?;
+    // Bypass tctildr to avoid dlopen — see kettle's tss-esapi patch.
+    let mut context = Context::new_device_direct(std::path::Path::new("/dev/tpm0"))?;
     let tpm_handle: TpmHandle = VTPM_AK_HANDLE.try_into()?;
     let key_handle = context.tr_from_tpm_public(tpm_handle)?;
 

@@ -64,3 +64,24 @@ include!(concat!(
 // If the "generate-bindings" feature is on, use the generated bindings.
 #[cfg(feature = "generate-bindings")]
 include!(concat!(env!("OUT_DIR"), "/tss_esapi_bindings.rs"));
+
+// Tss2_Tcti_Device_Init is exposed by libtss2-tcti-device. The committed
+// bindgen output doesn't include it because upstream tss-esapi-sys only
+// links the loader-based path; we link tss2-tcti-device statically (see
+// build.rs) and declare the symbol manually so we can bypass tctildr.
+//
+// Linux-only: `/dev/tpm0` and the device TCTI shared object only exist on
+// Linux, and build.rs only pkg_config-probes tss2-tcti-device there.
+//
+// Use the binding-internal `size_t` (rather than Rust's `usize`) to match
+// the rest of the generated TCTI init typedefs — the bindings are built
+// with `size_t_is_usize(false)`, and on 32-bit ARM Linux size_t is c_uint
+// rather than c_ulong, so the two aren't ABI-equivalent everywhere.
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    pub fn Tss2_Tcti_Device_Init(
+        tctiContext: *mut TSS2_TCTI_CONTEXT,
+        size: *mut size_t,
+        conf: *const ::std::os::raw::c_char,
+    ) -> TSS2_RC;
+}

@@ -88,9 +88,24 @@ impl Context {
     /// * if either `Tss2_TctiLdr_Initiialize` or `Esys_Initialize` fail, a corresponding
     ///   Tss2ResponseCode will be returned
     pub fn new(tcti_name_conf: TctiNameConf) -> Result<Self> {
-        let mut esys_context = null_mut();
+        Self::new_with_tcti(TctiContext::initialize(tcti_name_conf)?)
+    }
 
-        let mut _tcti_context = TctiContext::initialize(tcti_name_conf)?;
+    /// Create a new ESYS context that talks to the TPM directly through the
+    /// device TCTI, bypassing `tctildr`'s dlopen-based plugin loader.
+    ///
+    /// This is the path to use when the runtime can't dlopen TCTI plugin
+    /// shared objects — e.g. a statically-linked glibc binary.
+    ///
+    /// Linux-only: depends on `/dev/tpm0` and on libtss2-tcti-device,
+    /// neither of which exists on other platforms.
+    #[cfg(target_os = "linux")]
+    pub fn new_device_direct(device_path: &std::path::Path) -> Result<Self> {
+        Self::new_with_tcti(TctiContext::initialize_device_direct(device_path)?)
+    }
+
+    fn new_with_tcti(mut _tcti_context: TctiContext) -> Result<Self> {
+        let mut esys_context = null_mut();
 
         let ret = unsafe {
             Esys_Initialize(

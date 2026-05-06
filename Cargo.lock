@@ -166,7 +166,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "attestation"
 version = "0.4.0"
-source = "git+https://github.com/lunal-dev/attestation-rs?branch=usize#b7c8c79d800fafd4b4507bdb72c9336203ded845"
+source = "git+https://github.com/lunal-dev/attestation-rs?branch=usize#952489ea39cbb300828af5c1268eff3387cfe4b5"
 dependencies = [
  "anyhow",
  "async-trait",

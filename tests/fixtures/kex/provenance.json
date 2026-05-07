@@ -1,0 +1,71 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "predicate": {
+    "buildDefinition": {
+      "buildType": "https://lunal.dev/kettle/cargo@v1",
+      "externalParameters": {
+        "buildCommand": "cargo build",
+        "source": {
+          "digest": {
+            "gitCommit": "0fc9cfa2d7cf98bf1d6c370a5359cd4ac451540a",
+            "gitTree": "40097e700eabf1c2cfacd538ab1d921678419862"
+          },
+          "uri": ""
+        }
+      },
+      "internalParameters": {
+        "lockfileHash": {
+          "sha256": "1cfa007a25df8a198414390b6402cfb7ed5dd2fd67e2c911ea0214d68f0fcf47"
+        },
+        "toolchain": {
+          "cargo": {
+            "digest": {
+              "sha256": "6bbe4f5601b419b69ec2001b5e64c997770f620e1493ad7007b78e505457796f"
+            },
+            "version": "cargo 1.93.1 (083ac5135 2025-12-15)"
+          },
+          "rustc": {
+            "digest": {
+              "sha256": "bd1875234c27f9f0c9f9c700ade69f7e83d25e368f38407d32b4b0e2cbc2426d"
+            },
+            "version": "rustc 1.93.1 (01f6ddf75 2026-02-11)"
+          },
+          "kettle": {
+            "digest": {
+              "sha256": "\npkg_version:0.1.1\nbranch:\ncommit_hash:\nbuild_time:2026-05-06 08:35:09 +00:00\nbuild_env:rustc 1.94.0 (4a4ef493e 2026-03-02) (built from a source tarball),"
+            },
+            "version": "\npkg_version:0.1.1\nbranch:\ncommit_hash:\nbuild_time:2026-05-06 08:35:09 +00:00\nbuild_env:rustc 1.94.0 (4a4ef493e 2026-03-02) (built from a source tarball),"
+          }
+        }
+      },
+      "resolvedDependencies": []
+    },
+    "runDetails": {
+      "builder": {
+        "id": "https://lunal.dev/kettle-tee/v1"
+      },
+      "byproducts": [
+        {
+          "digest": {
+            "sha256": "5752a4489fb58a3e650d986760852b42cef1b0882ad1f7abd74c7ada44fbdd17"
+          },
+          "name": "input_merkle_root"
+        }
+      ],
+      "metadata": {
+        "invocationId": "build-20260506-095957-2f3799da",
+        "startedOn": "2026-05-06T09:59:57.341913+00:00",
+        "finishedOn": "2026-05-06T09:59:57.397699+00:00"
+      }
+    }
+  },
+  "predicateType": "https://slsa.dev/provenance/v1",
+  "subject": [
+    {
+      "digest": {
+        "sha256": "026655cedb5db912f96509f5e58d5090312d6fe74686c663d15ed4a10ff4a9ba"
+      },
+      "name": "kex"
+    }
+  ]
+}

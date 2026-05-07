@@ -40,11 +40,7 @@ enum Commands {
         path: PathBuf,
     },
     /// Verify a Kettle build, including provenance and attestation
-    Verify {
-        /// Path to directory containing provenance.json and evidence.json
-        #[arg(default_value = ".")]
-        path: PathBuf,
-    },
+    Verify(commands::verify::VerifyArgs),
 }
 
 #[tokio::main]
@@ -59,7 +55,7 @@ async fn main() {
     let result = match args.command {
         Commands::Attest(args) => commands::attest::attest(args).await,
         Commands::Build { ref path } => commands::build::build(path),
-        Commands::Verify { ref path } => commands::verify::verify(path).await,
+        Commands::Verify(args) => commands::verify::verify(args).await,
     };
 
     if let Err(e) = result {

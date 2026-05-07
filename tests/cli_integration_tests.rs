@@ -77,6 +77,23 @@ fn cli_verify() {
     );
 }
 
+#[test]
+fn cli_verify_with_nonce() {
+    let output = Command::new(kettle_bin())
+        .args(["verify", "./tests/fixtures/kex"])
+        .output()
+        .expect("failed to execute kettle verify");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Verification PASSED"),
+        "expected verify to pass, got {}",
+        stdout
+    );
+}
+
 // kettle attest
 
 #[cfg(not(all(feature = "attest", target_os = "linux")))]

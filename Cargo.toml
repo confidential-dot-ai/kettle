@@ -72,6 +72,10 @@ pretty_assertions = "1.4.1"
 axum = {version = "0.8.9", optional = true}
 tar = {version = "0.4.45", optional = true}
 
+[[bin]]
+name = "kettle-server"
+required-features = ["server"]
+
 [dev-dependencies]
 tempfile = "3"
 regex-lite = "0.1"

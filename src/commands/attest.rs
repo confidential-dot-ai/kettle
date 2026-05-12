@@ -6,11 +6,11 @@ use std::path::PathBuf;
 pub struct AttestArgs {
     /// Path to the project to be built and attested
     #[arg()]
-    path: PathBuf,
+    pub path: PathBuf,
     /// Optional nonce, as hex string, to be included in the attestation.
     /// Can be up to 16 bytes. For a unique nonce, use e.g. `uuidgen`.
     #[arg(short, long)]
-    nonce: Option<String>,
+    pub nonce: Option<String>,
 }
 
 #[cfg(all(feature = "attest", target_os = "linux"))]

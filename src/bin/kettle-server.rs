@@ -6,6 +6,7 @@ use axum::routing::{get, post};
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
+use kettle::commands::attest::AttestArgs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -135,9 +136,12 @@ async fn do_build(
     }
 
     // Run attest with nonce
-    commands::attest::attest(&project_dir, Some(&nonce_bytes))
-        .await
-        .map_err(|e| (StatusCode::CONFLICT, format!("build failed: {e}")))?;
+    commands::attest::attest(AttestArgs {
+        path: project_dir.clone(),
+        nonce: Some(hex::encode(nonce_bytes)),
+    })
+    .await
+    .map_err(|e| (StatusCode::CONFLICT, format!("build failed: {e}")))?;
 
     // Tar up kettle-build/ directory as response
     let kettle_build_dir = project_dir.join("kettle-build");

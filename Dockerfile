@@ -20,7 +20,9 @@ ENV PKG_CONFIG_ALL_STATIC=1
 
 # Run a cargo build that explicitly targets musl, and links it statically.
 ENV RUSTFLAGS='-C target-feature=+crt-static'
-RUN cargo build --bin kettle --features attest \
+RUN cargo build \
+  --bin kettle --features attest \
+  --bin kettle-server --features server \
   --release --locked \
   --target x86_64-unknown-linux-musl
 

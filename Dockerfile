@@ -29,4 +29,7 @@ RUN cargo build \
 # Copy the binary into a stage named "artifact" so it can be extracted to the host:
 #   docker build . --target=artifact --output "type=local,dest=$(pwd)/out/"
 FROM scratch AS artifact
-COPY --from=build /tmp/kettle/target/x86_64-unknown-linux-musl/release/kettle /kettle
+COPY --from=build \
+  /tmp/kettle/target/x86_64-unknown-linux-musl/release/kettle \
+  /tmp/kettle/target/x86_64-unknown-linux-musl/release/kettle-server \
+  /

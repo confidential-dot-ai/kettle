@@ -44,9 +44,71 @@ fn collect_external_path_deps(project_path: &Path) -> Result<HashMap<String, Pat
 }
 
 /// Return the list of Cargo.toml paths to inspect (project root plus any
-/// workspace members). Task 5 expands this for workspace handling.
+/// workspace members).
 fn discover_manifests(project_canon: &Path) -> Result<Vec<PathBuf>> {
-    Ok(vec![project_canon.join("Cargo.toml")])
+    let root = project_canon.join("Cargo.toml");
+    let mut manifests = vec![root.clone()];
+
+    // If the root manifest has a [workspace] section, expand its members.
+    let bytes = fs_err::read(&root)
+        .with_context(|| format!("read manifest {}", root.display()))?;
+    let text = std::str::from_utf8(&bytes)
+        .with_context(|| format!("manifest {} is not utf-8", root.display()))?;
+    let doc: toml::Value = toml::from_str(text)
+        .with_context(|| format!("parse manifest {}", root.display()))?;
+
+    let Some(workspace) = doc.get("workspace").and_then(|v| v.as_table()) else {
+        return Ok(manifests);
+    };
+    let Some(members) = workspace.get("members").and_then(|v| v.as_array()) else {
+        return Ok(manifests);
+    };
+    for member in members {
+        let Some(pattern) = member.as_str() else { continue };
+        for member_dir in expand_member_pattern(project_canon, pattern)? {
+            let m = member_dir.join("Cargo.toml");
+            if !m.exists() {
+                return Err(anyhow!(
+                    "workspace member `{pattern}` resolved to {} but no Cargo.toml is present",
+                    member_dir.display()
+                ));
+            }
+            manifests.push(m);
+        }
+    }
+    Ok(manifests)
+}
+
+/// Expand a single `workspace.members` entry into a list of member dirs.
+/// Supports a literal path or a single trailing `*` (e.g. `crates/*`).
+/// Anything more elaborate errors out.
+fn expand_member_pattern(project_canon: &Path, pattern: &str) -> Result<Vec<PathBuf>> {
+    if !pattern.contains('*') {
+        return Ok(vec![project_canon.join(pattern)]);
+    }
+    if pattern.matches('*').count() > 1 || !pattern.ends_with('*') {
+        return Err(anyhow!(
+            "unsupported glob pattern in workspace.members: `{pattern}` \
+            (only literal paths or a single trailing `*` are supported)"
+        ));
+    }
+    // Strip the trailing `*` (and possibly trailing `/`)
+    let prefix = pattern.trim_end_matches('*').trim_end_matches('/');
+    let base = if prefix.is_empty() {
+        project_canon.to_path_buf()
+    } else {
+        project_canon.join(prefix)
+    };
+    let mut dirs = Vec::new();
+    for entry in fs_err::read_dir(&base)
+        .with_context(|| format!("read workspace member dir {}", base.display()))?
+    {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            dirs.push(entry.path());
+        }
+    }
+    Ok(dirs)
 }
 
 /// Parse one manifest, find `path = "..."` declarations under
@@ -346,6 +408,181 @@ tss = { path = "crates/tss" }
         );
         let map = collect_external_path_deps(project.path()).unwrap();
         assert!(map.is_empty());
+    }
+
+    #[test]
+    fn workspace_explicit_members_are_walked() {
+        let parent = TempDir::new().unwrap();
+        let project_dir = parent.path().join("project");
+        let external_dir = parent.path().join("ext");
+        fs_err::create_dir_all(project_dir.join("a")).unwrap();
+        fs_err::create_dir_all(project_dir.join("b")).unwrap();
+        fs_err::create_dir_all(&external_dir).unwrap();
+        write_manifest(
+            &external_dir,
+            r#"
+[package]
+name = "ext"
+version = "0.1.0"
+"#,
+        );
+        // Root virtual workspace manifest
+        write_manifest(
+            &project_dir,
+            r#"
+[workspace]
+members = ["a", "b"]
+"#,
+        );
+        // Member `a` declares an external path dep
+        write_manifest(
+            &project_dir.join("a"),
+            r#"
+[package]
+name = "a"
+version = "0.1.0"
+
+[dependencies]
+ext = { path = "../../ext" }
+"#,
+        );
+        // Member `b` does not
+        write_manifest(
+            &project_dir.join("b"),
+            r#"
+[package]
+name = "b"
+version = "0.1.0"
+"#,
+        );
+
+        let map = collect_external_path_deps(&project_dir).unwrap();
+        assert_eq!(map.len(), 1, "expected only `ext`, got {map:?}");
+        assert!(map.contains_key("ext"));
+    }
+
+    #[test]
+    fn workspace_glob_members_are_expanded() {
+        let parent = TempDir::new().unwrap();
+        let project_dir = parent.path().join("project");
+        let external_dir = parent.path().join("ext");
+        fs_err::create_dir_all(project_dir.join("crates/a")).unwrap();
+        fs_err::create_dir_all(project_dir.join("crates/b")).unwrap();
+        fs_err::create_dir_all(&external_dir).unwrap();
+        write_manifest(
+            &external_dir,
+            r#"
+[package]
+name = "ext"
+version = "0.1.0"
+"#,
+        );
+        write_manifest(
+            &project_dir,
+            r#"
+[workspace]
+members = ["crates/*"]
+"#,
+        );
+        write_manifest(
+            &project_dir.join("crates/a"),
+            r#"
+[package]
+name = "a"
+version = "0.1.0"
+
+[dependencies]
+ext = { path = "../../../ext" }
+"#,
+        );
+        write_manifest(
+            &project_dir.join("crates/b"),
+            r#"
+[package]
+name = "b"
+version = "0.1.0"
+"#,
+        );
+
+        let map = collect_external_path_deps(&project_dir).unwrap();
+        assert_eq!(map.len(), 1, "got {map:?}");
+        assert!(map.contains_key("ext"));
+    }
+
+    #[test]
+    fn missing_workspace_member_errors() {
+        let project = TempDir::new().unwrap();
+        write_manifest(
+            project.path(),
+            r#"
+[workspace]
+members = ["doesnotexist"]
+"#,
+        );
+        let err = collect_external_path_deps(project.path()).unwrap_err().to_string();
+        assert!(
+            err.contains("doesnotexist") || err.contains("no Cargo.toml"),
+            "error should mention the missing member: {err}"
+        );
+    }
+
+    #[test]
+    fn unsupported_glob_pattern_errors() {
+        let project = TempDir::new().unwrap();
+        write_manifest(
+            project.path(),
+            r#"
+[workspace]
+members = ["**/*"]
+"#,
+        );
+        let err = collect_external_path_deps(project.path()).unwrap_err().to_string();
+        assert!(err.contains("unsupported glob pattern"), "error: {err}");
+    }
+
+    #[test]
+    fn conflicting_path_declarations_error() {
+        let parent = TempDir::new().unwrap();
+        let project_dir = parent.path().join("project");
+        let ext_a = parent.path().join("ext-a");
+        let ext_b = parent.path().join("ext-b");
+        fs_err::create_dir_all(project_dir.join("a")).unwrap();
+        fs_err::create_dir_all(project_dir.join("b")).unwrap();
+        fs_err::create_dir_all(&ext_a).unwrap();
+        fs_err::create_dir_all(&ext_b).unwrap();
+        write_manifest(&ext_a, "[package]\nname = \"ext\"\nversion = \"0.1.0\"\n");
+        write_manifest(&ext_b, "[package]\nname = \"ext\"\nversion = \"0.1.0\"\n");
+        write_manifest(
+            &project_dir,
+            r#"
+[workspace]
+members = ["a", "b"]
+"#,
+        );
+        write_manifest(
+            &project_dir.join("a"),
+            r#"
+[package]
+name = "a"
+version = "0.1.0"
+
+[dependencies]
+ext = { path = "../../ext-a" }
+"#,
+        );
+        write_manifest(
+            &project_dir.join("b"),
+            r#"
+[package]
+name = "b"
+version = "0.1.0"
+
+[dependencies]
+ext = { path = "../../ext-b" }
+"#,
+        );
+        let err = collect_external_path_deps(&project_dir).unwrap_err().to_string();
+        assert!(err.contains("conflicting"), "error: {err}");
     }
 
     #[test]

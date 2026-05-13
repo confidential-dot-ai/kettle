@@ -85,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [ ripgrep, eza, openclaw ]
+        project: [ ripgrep, eza, openclaw, kettle ]
         include:
           - project: ripgrep
             owner: burntsushi
@@ -99,6 +99,10 @@ jobs:
             owner: openclaw
             toolchain: pnpm
             ref: d518260bb8261bb179cfb421a8c166915bb59dd1
+          - project: kettle
+            owner: ${{ github.repository_owner }}
+            toolchain: rust
+            ref: ${{ github.sha }}
     steps:
       - name: Check out ${{ matrix.project }}
         uses: actions/checkout@v6

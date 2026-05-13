@@ -322,6 +322,34 @@ fn classify_package(
     }
 }
 
+/// Public entry point. Parses `Cargo.lock`, classifies each package, and
+/// returns a sorted list of `ResolvedDependency` (workspace members
+/// excluded). Errors on any package that can't be accounted for, or on
+/// a dirty external path dep working tree.
+pub(crate) fn resolve_dependencies(
+    project_path: &Path,
+    lockfile_bytes: &[u8],
+) -> Result<Vec<ResolvedDependency>> {
+    let project_canon = fs_err::canonicalize(project_path)
+        .with_context(|| format!("canonicalize project path {}", project_path.display()))?;
+    let external_paths = collect_external_path_deps(project_path)?;
+
+    let text = std::str::from_utf8(lockfile_bytes).context("Cargo.lock is not utf-8")?;
+    let lock: toml::Value = toml::from_str(text).context("parse Cargo.lock")?;
+    let Some(packages) = lock.get("package").and_then(|v| v.as_array()) else {
+        return Ok(vec![]);
+    };
+
+    let mut deps = Vec::new();
+    for pkg in packages {
+        if let Some(dep) = classify_package(pkg, &external_paths, &project_canon)? {
+            deps.push(dep);
+        }
+    }
+    deps.sort_by(|a, b| a.uri.cmp(&b.uri));
+    Ok(deps)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1022,5 +1050,77 @@ version = "0.1.0"
             err.contains("not a git repository") || err.contains("git rev-parse"),
             "error should indicate it's not a git repo: {err}"
         );
+    }
+
+    const CARGO_LOCK_FIXTURE: &[u8] = include_bytes!("../../tests/fixtures/ripgrep/Cargo.lock");
+
+    #[test]
+    fn resolve_dependencies_ripgrep_regression() {
+        let project = TempDir::new().unwrap();
+        // Minimal Cargo.toml so collect_external_path_deps doesn't choke.
+        write_manifest(
+            project.path(),
+            r#"
+[package]
+name = "ripgrep-fixture"
+version = "0.1.0"
+"#,
+        );
+        let deps = resolve_dependencies(project.path(), CARGO_LOCK_FIXTURE).unwrap();
+        // 51 registry deps (the same count as the pre-existing parse_cargo_lock test).
+        assert_eq!(deps.len(), 51, "expected 51 deps, got {}", deps.len());
+        for dep in &deps {
+            assert!(
+                dep.uri.starts_with("pkg:cargo/"),
+                "URI should start with pkg:cargo/: {}",
+                dep.uri
+            );
+            assert!(
+                dep.uri.contains("?checksum=sha256:"),
+                "URI should contain checksum: {}",
+                dep.uri
+            );
+        }
+        // Sorted by URI
+        let uris: Vec<&str> = deps.iter().map(|d| d.uri.as_str()).collect();
+        let mut sorted = uris.clone();
+        sorted.sort();
+        assert_eq!(uris, sorted, "deps should be sorted by URI");
+        // Workspace member my-project must not appear
+        assert!(
+            deps.iter().all(|d| d.name != "my-project"),
+            "workspace member should be excluded"
+        );
+    }
+
+    #[test]
+    fn resolve_dependencies_invalid_toml_errors() {
+        let project = TempDir::new().unwrap();
+        write_manifest(
+            project.path(),
+            r#"
+[package]
+name = "demo"
+version = "0.1.0"
+"#,
+        );
+        let result = resolve_dependencies(project.path(), b"{{{{not valid toml}}}}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_dependencies_empty_package_list_returns_empty() {
+        let project = TempDir::new().unwrap();
+        write_manifest(
+            project.path(),
+            r#"
+[package]
+name = "demo"
+version = "0.1.0"
+"#,
+        );
+        let deps =
+            resolve_dependencies(project.path(), b"[metadata]\nkey = \"value\"").unwrap();
+        assert!(deps.is_empty());
     }
 }

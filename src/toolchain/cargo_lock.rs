@@ -65,9 +65,13 @@ fn discover_manifests(project_canon: &Path) -> Result<Vec<PathBuf>> {
     };
     for member in members {
         let Some(pattern) = member.as_str() else { continue };
+        let is_glob = pattern.contains('*');
         for member_dir in expand_member_pattern(project_canon, pattern)? {
             let m = member_dir.join("Cargo.toml");
             if !m.exists() {
+                if is_glob {
+                    continue; // matches cargo's silent-skip behavior for glob expansions
+                }
                 return Err(anyhow!(
                     "workspace member `{pattern}` resolved to {} but no Cargo.toml is present",
                     member_dir.display()
@@ -583,6 +587,55 @@ ext = { path = "../../ext-b" }
         );
         let err = collect_external_path_deps(&project_dir).unwrap_err().to_string();
         assert!(err.contains("conflicting"), "error: {err}");
+    }
+
+    #[test]
+    fn workspace_glob_skips_dirs_without_cargo_toml() {
+        let parent = TempDir::new().unwrap();
+        let project_dir = parent.path().join("project");
+        let external_dir = parent.path().join("ext");
+        // Real crate at crates/a
+        fs_err::create_dir_all(project_dir.join("crates/a")).unwrap();
+        // Non-crate directory at crates/scripts (no Cargo.toml)
+        fs_err::create_dir_all(project_dir.join("crates/scripts")).unwrap();
+        fs_err::write(
+            project_dir.join("crates/scripts/run.sh"),
+            "#!/bin/sh\necho hi\n",
+        )
+        .unwrap();
+        fs_err::create_dir_all(&external_dir).unwrap();
+
+        write_manifest(
+            &external_dir,
+            r#"
+[package]
+name = "ext"
+version = "0.1.0"
+"#,
+        );
+        write_manifest(
+            &project_dir,
+            r#"
+[workspace]
+members = ["crates/*"]
+"#,
+        );
+        write_manifest(
+            &project_dir.join("crates/a"),
+            r#"
+[package]
+name = "a"
+version = "0.1.0"
+
+[dependencies]
+ext = { path = "../../../ext" }
+"#,
+        );
+
+        // The non-crate dir `crates/scripts` should be silently skipped.
+        let map = collect_external_path_deps(&project_dir).unwrap();
+        assert_eq!(map.len(), 1, "got {map:?}");
+        assert!(map.contains_key("ext"));
     }
 
     #[test]

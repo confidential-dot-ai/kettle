@@ -1,0 +1,58 @@
+#!/bin/bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+# 1. Reproducibly build the release binaries.
+bin/reproduce-build
+
+BIN="$REPO_ROOT/target/reproducible/kettle-server"
+OUT="$REPO_ROOT/target/reproducible/server-user-data.yml"
+
+if [[ ! -f "$BIN" ]]; then
+  echo "expected $BIN to exist after bin/reproduce-build" >&2
+  exit 1
+fi
+
+BIN_B64="$(base64 -w0 "$BIN")"
+
+read -r -d '' UNIT <<'EOF' || true
+[Unit]
+Description=Kettle build server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/kettle-server
+Restart=no
+User=kettle
+Group=kettle
+DynamicUser=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+{
+  echo "#cloud-config"
+  echo "write_files:"
+  echo "  - path: /usr/local/bin/kettle-server"
+  echo "    permissions: '0755'"
+  echo "    owner: root:root"
+  echo "    encoding: b64"
+  echo "    content: $BIN_B64"
+  echo "  - path: /etc/systemd/system/kettle-server.service"
+  echo "    permissions: '0644'"
+  echo "    owner: root:root"
+  echo "    content: |"
+  while IFS= read -r line; do
+    echo "      $line"
+  done <<< "$UNIT"
+  echo "runcmd:"
+  echo "  - systemctl daemon-reload"
+  echo "  - systemctl enable --now kettle-server.service"
+} > "$OUT"
+
+echo "wrote $OUT"

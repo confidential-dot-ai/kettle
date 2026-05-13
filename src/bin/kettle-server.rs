@@ -1,12 +1,11 @@
 use axum::Router;
-use axum::body::Bytes;
-use axum::extract::State;
+use axum::extract;
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use kettle::commands::attest::AttestArgs;
+use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -45,10 +44,16 @@ async fn health() -> &'static str {
     "ok"
 }
 
+#[derive(Deserialize, Debug)]
+enum BuildArgs {
+    Repo { repo_url: String, repo_ref: String },
+    Tarball { tarball_data: Vec<u8> },
+}
+
 async fn build_handler(
-    State(state): State<Arc<AppState>>,
+    extract::State(state): extract::State<Arc<AppState>>,
     headers: HeaderMap,
-    body: Bytes,
+    extract::Json(payload): extract::Json<BuildArgs>,
 ) -> Result<(StatusCode, [(&'static str, &'static str); 1], Vec<u8>), (StatusCode, String)> {
     let mut busy = state.busy.lock().await;
     if *busy {
@@ -56,7 +61,7 @@ async fn build_handler(
     }
     *busy = true;
 
-    let result = do_build(&headers, &body).await;
+    let result = do_build(&headers, &payload).await;
 
     *busy = false;
     result
@@ -64,36 +69,92 @@ async fn build_handler(
 
 async fn do_build(
     headers: &HeaderMap,
-    body: &Bytes,
+    args: &BuildArgs,
 ) -> Result<(StatusCode, [(&'static str, &'static str); 1], Vec<u8>), (StatusCode, String)> {
-    let nonce_hex = headers
-        .get("x-nonce")
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| {
+    let work_dir = create_work_dir()?;
+
+    let nonce = get_nonce(headers)?;
+
+    let project_dir = match args {
+        BuildArgs::Repo { repo_url, repo_ref } => {
+            repo_setup(&repo_url, &repo_ref, &nonce, &work_dir).await?
+        }
+        BuildArgs::Tarball { tarball_data } => {
+            tarball_setup(&tarball_data, &nonce, &work_dir).await?
+        }
+    };
+
+    #[cfg(feature = "attest")]
+    commands::attest::attest(AttestArgs {
+        path: project_dir.clone(),
+        nonce: Some(hex::encode(nonce_bytes)),
+    })
+    .map_err(|e| (StatusCode::CONFLICT, format!("build failed: {e}")))?;
+
+    #[cfg(not(feature = "attest"))]
+    commands::build::build(&project_dir)
+        .map_err(|e| (StatusCode::CONFLICT, format!("build failed: {e}")))?;
+
+    nonce;
+
+    // Tar up kettle-build/ directory as response
+    let kettle_build_dir = project_dir.join("kettle-build");
+    let mut result_buf = Vec::new();
+    {
+        let enc = GzEncoder::new(&mut result_buf, Compression::fast());
+        let mut builder = tar::Builder::new(enc);
+        builder
+            .append_dir_all(".", &kettle_build_dir)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("tar result: {e}"),
+                )
+            })?;
+        let enc = builder.into_inner().map_err(|e| {
             (
-                StatusCode::BAD_REQUEST,
-                "missing X-Nonce header".to_string(),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("tar finish: {e}"),
             )
         })?;
-
-    let nonce_bytes = hex::decode(nonce_hex)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid nonce hex: {e}")))?;
-
-    if nonce_bytes.len() > 32 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "nonce must be at most 32 bytes".to_string(),
-        ));
+        enc.finish()
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("gz finish: {e}")))?;
     }
 
-    // Create work directory
-    let work_id = uuid::Uuid::new_v4();
-    let work_dir = PathBuf::from(format!("/tmp/kettle-work-{work_id}"));
-    std::fs::create_dir_all(&work_dir)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("mkdir: {e}")))?;
+    // Cleanup
+    let _ = std::fs::remove_dir_all(&work_dir);
 
+    Ok((
+        StatusCode::OK,
+        [("content-type", "application/gzip")],
+        result_buf,
+    ))
+}
+
+async fn repo_setup(
+    repo_url: &str,
+    repo_ref: &str,
+    nonce: &Vec<u8>,
+    work_dir: &PathBuf,
+) -> Result<PathBuf, (StatusCode, String)> {
+    std::process::Command::new("git")
+        .args(["clone", "--revision", repo_ref, "--shallow", "--", repo_url])
+        .current_dir(&work_dir)
+        .output()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("git clone: {e}")))?;
+
+    let project_dir = find_project_dir(&work_dir)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("bad project layout: {e}")))?;
+    Ok(project_dir)
+}
+
+async fn tarball_setup(
+    tarball_data: &Vec<u8>,
+    nonce: &Vec<u8>,
+    work_dir: &PathBuf,
+) -> Result<PathBuf, (StatusCode, String)> {
     // Extract tarball
-    let gz = GzDecoder::new(body.as_ref());
+    let gz = GzDecoder::new(&tarball_data[..]);
     let mut archive = tar::Archive::new(gz);
     archive
         .unpack(&work_dir)
@@ -134,47 +195,36 @@ async fn do_build(
                 )
             })?;
     }
+    Ok(project_dir)
+}
 
-    // Run attest with nonce
-    commands::attest::attest(AttestArgs {
-        path: project_dir.clone(),
-        nonce: Some(hex::encode(nonce_bytes)),
-    })
-    .await
-    .map_err(|e| (StatusCode::CONFLICT, format!("build failed: {e}")))?;
+fn create_work_dir() -> Result<PathBuf, (StatusCode, String)> {
+    let work_id = uuid::Uuid::new_v4();
+    let work_dir = PathBuf::from(format!("/tmp/kettle-work-{work_id}"));
+    std::fs::create_dir_all(&work_dir)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("mkdir: {e}")))?;
+    Ok(work_dir)
+}
 
-    // Tar up kettle-build/ directory as response
-    let kettle_build_dir = project_dir.join("kettle-build");
-    let mut result_buf = Vec::new();
-    {
-        let enc = GzEncoder::new(&mut result_buf, Compression::fast());
-        let mut builder = tar::Builder::new(enc);
-        builder
-            .append_dir_all(".", &kettle_build_dir)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("tar result: {e}"),
-                )
-            })?;
-        let enc = builder.into_inner().map_err(|e| {
+fn get_nonce(headers: &HeaderMap) -> Result<Vec<u8>, (StatusCode, String)> {
+    let nonce_hex = headers
+        .get("x-nonce")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("tar finish: {e}"),
+                StatusCode::BAD_REQUEST,
+                "missing X-Nonce header".to_string(),
             )
         })?;
-        enc.finish()
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("gz finish: {e}")))?;
+    let nonce_bytes = hex::decode(nonce_hex)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid nonce hex: {e}")))?;
+    if nonce_bytes.len() > 32 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "nonce must be at most 32 bytes".to_string(),
+        ));
     }
-
-    // Cleanup
-    let _ = std::fs::remove_dir_all(&work_dir);
-
-    Ok((
-        StatusCode::OK,
-        [("content-type", "application/gzip")],
-        result_buf,
-    ))
+    Ok(nonce_bytes)
 }
 
 fn find_project_dir(work_dir: &PathBuf) -> Result<PathBuf, String> {

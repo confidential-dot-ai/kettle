@@ -7,7 +7,7 @@ build = "build.rs"
 
 [features]
 attest = ["attestation/attest"]
-server = ["attest", "dep:axum", "dep:tar"]
+server = ["dep:axum", "dep:tar"]
 
 [dependencies]
 anyhow = "1.0.101"

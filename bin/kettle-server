@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Match options to rust-analyzer so we stop fighting
-export RUSTC_BOOTSTRAP=1
+# export RUSTC_BOOTSTRAP=1
 
 if [[ "$(cat /sys/devices/virtual/dmi/id/chassis_asset_tag 2>/dev/null)" == "7783-7084-3265-9085-8269-3286-77" ]]; then
   AZURE=true
@@ -14,7 +14,7 @@ fi
 
 if [[ "${AZURE_SECURITY_TYPE:-}" == "ConfidentialVM" ]]; then
   set -x
-  cargo run --bin kettle-server --features server -- "$@"
+  cargo run --bin kettle-server --features attest,server -- "$@"
 else
-  echo "Kettle server only works inside a confidential VM"
+  cargo run --bin kettle-server --features server -- "$@"
 fi

@@ -870,4 +870,19 @@ linux-extra = { path = "../linux_extra" }
         assert_eq!(map.len(), 1);
         assert!(map.contains_key("linux-extra"));
     }
+
+    #[test]
+    fn classify_git_dep_without_commit_errors() {
+        let pkg = pkg_from_toml(
+            r#"
+name = "sev"
+version = "7.1.0"
+source = "git+https://github.com/virtee/sev"
+"#,
+        );
+        let empty: HashMap<String, PathBuf> = HashMap::new();
+        let err = classify_package(&pkg, &empty).unwrap_err().to_string();
+        assert!(err.contains("without commit"), "error: {err}");
+        assert!(err.contains("sev"), "error: {err}");
+    }
 }

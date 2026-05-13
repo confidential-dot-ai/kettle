@@ -63,8 +63,8 @@ pub async fn get_events(
     Path(id): Path<String>,
 ) -> Result<impl axum::response::IntoResponse, StatusCode> {
     let job = state.registry.get(&id).ok_or(StatusCode::NOT_FOUND)?;
-    let backlog = job.snapshot_events().await;
     let rx = job.subscribe();
+    let backlog = job.snapshot_events().await;
 
     let backlog_stream = futures_util::stream::iter(
         backlog.into_iter().map(|e| Ok::<_, Infallible>(to_sse(e)))

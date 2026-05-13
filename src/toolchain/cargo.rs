@@ -36,7 +36,7 @@ impl ToolchainDriver for CargoInputs {
     }
 
     fn collect_inputs(
-        _path: &Path,
+        path: &Path,
         _git: &GitContext,
         lockfile_hash: &str,
         lockfile_bytes: &[u8],
@@ -47,7 +47,7 @@ impl ToolchainDriver for CargoInputs {
         debug!("cargo info {:?}", rustc);
         let kettle = ToolBinaryInfo::kettle_info()?;
         debug!("kettle info {:?}", rustc);
-        let resolved_deps = parse_cargo_lock(lockfile_bytes)?;
+        let resolved_deps = crate::toolchain::cargo_lock::resolve_dependencies(path, lockfile_bytes)?;
         debug!("found deps {:?}", resolved_deps);
         Ok(Self {
             kettle_version: kettle.version,
@@ -149,100 +149,3 @@ impl ToolchainDriver for CargoInputs {
     }
 }
 
-fn parse_cargo_lock(bytes: &[u8]) -> Result<Vec<ResolvedDependency>> {
-    let content = std::str::from_utf8(bytes)?;
-    let lock: toml::Value = toml::from_str(content)?;
-    let Some(packages) = lock.get("package").and_then(|v| v.as_array()) else {
-        return Ok(vec![]);
-    };
-
-    let mut deps = Vec::new();
-    for pkg in packages {
-        let name = pkg.get("name").and_then(|v| v.as_str()).unwrap_or_default();
-        let version = pkg
-            .get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default();
-        if let Some(checksum) = pkg.get("checksum").and_then(|v| v.as_str()) {
-            deps.push(ResolvedDependency {
-                annotations: None,
-                digest: Digest::Sha256 {
-                    sha256: checksum.to_string(),
-                },
-                name: name.to_string(),
-                uri: format!("pkg:cargo/{name}@{version}?checksum=sha256:{checksum}"),
-            });
-        }
-    }
-
-    deps.sort_by_cached_key(|e| e.uri.clone());
-    Ok(deps)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const CARGO_LOCK_FIXTURE: &[u8] = include_bytes!("../../tests/fixtures/ripgrep/Cargo.lock");
-
-    #[test]
-    fn happy_path() {
-        let deps = parse_cargo_lock(CARGO_LOCK_FIXTURE).unwrap();
-        // Fixture has 5 registry packages (my-project has no checksum)
-        assert_eq!(deps.len(), 51);
-        // Each entry has proper URI format
-        for dep in &deps {
-            assert!(
-                dep.uri.starts_with("pkg:cargo/"),
-                "URI should start with pkg:cargo/: {}",
-                dep.uri
-            );
-            assert!(
-                dep.uri.contains("?checksum=sha256:"),
-                "URI should contain checksum: {}",
-                dep.uri
-            );
-        }
-        // Should be sorted by uri
-        let uris: Vec<&str> = deps.iter().map(|d| d.uri.as_str()).collect();
-        let mut sorted = uris.clone();
-        sorted.sort();
-        assert_eq!(uris, sorted, "dependencies should be sorted by URI");
-        // Workspace member (my-project) should be excluded
-        assert!(
-            deps.iter().all(|d| d.name != "my-project"),
-            "workspace member should be excluded"
-        );
-    }
-
-    #[test]
-    fn empty_package_list() {
-        let toml = b"[metadata]\nkey = \"value\"";
-        let deps = parse_cargo_lock(toml).unwrap();
-        assert!(deps.is_empty());
-    }
-
-    #[test]
-    fn invalid_toml() {
-        assert!(parse_cargo_lock(b"{{{{not valid toml}}}}").is_err());
-    }
-
-    #[test]
-    fn utf8_error() {
-        // Invalid UTF-8 sequence
-        let bytes: &[u8] = &[0xff, 0xfe, 0xfd];
-        assert!(parse_cargo_lock(bytes).is_err());
-    }
-
-    #[test]
-    fn deterministic_ordering() {
-        let r1 = parse_cargo_lock(CARGO_LOCK_FIXTURE).unwrap();
-        let r2 = parse_cargo_lock(CARGO_LOCK_FIXTURE).unwrap();
-        assert_eq!(r1.len(), r2.len());
-        for (a, b) in r1.iter().zip(r2.iter()) {
-            assert_eq!(a.uri, b.uri);
-            assert_eq!(a.name, b.name);
-            assert_eq!(a.digest.value(), b.digest.value());
-        }
-    }
-}

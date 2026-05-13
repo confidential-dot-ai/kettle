@@ -149,3 +149,60 @@ impl ToolchainDriver for CargoInputs {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provenance::Digest;
+    use tempfile::TempDir;
+
+    #[test]
+    fn collect_inputs_resolves_git_dep_through_cargo_lock() {
+        let project = TempDir::new().unwrap();
+        // Minimal Cargo.toml so collect_external_path_deps doesn't choke.
+        fs_err::write(
+            project.path().join("Cargo.toml"),
+            r#"
+[package]
+name = "demo"
+version = "0.1.0"
+"#,
+        )
+        .unwrap();
+
+        let lockfile = br#"
+version = 4
+
+[[package]]
+name = "demo"
+version = "0.1.0"
+
+[[package]]
+name = "sev"
+version = "7.1.0"
+source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e12c8"
+"#;
+
+        // Build a stub GitContext — collect_inputs ignores it (_git).
+        let git = GitContext {
+            commit: "a".repeat(40),
+            tree: "b".repeat(40),
+            source_uri: String::new(),
+        };
+
+        let inputs =
+            CargoInputs::collect_inputs(project.path(), &git, "lockhash", lockfile).unwrap();
+
+        assert_eq!(inputs.lockfile_hash, "lockhash");
+        // demo workspace member excluded; only sev should appear.
+        assert_eq!(inputs.resolved_deps.len(), 1);
+        let sev = &inputs.resolved_deps[0];
+        assert_eq!(sev.name, "sev");
+        match &sev.digest {
+            Digest::GitCommit { git_commit } => {
+                assert_eq!(git_commit, "900d42d6a1f9102ed52faa3a3889b54e8a7e12c8");
+            }
+            _ => panic!("expected GitCommit digest for sev"),
+        }
+    }
+}

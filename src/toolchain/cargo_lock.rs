@@ -233,6 +233,22 @@ fn relative_path(from: &Path, to: &Path) -> PathBuf {
     result
 }
 
+/// Percent-encode the characters that would confuse a PURL parser when
+/// embedded as a qualifier value: `?`, `#`, `&`, and space.
+fn pct_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '?' => out.push_str("%3F"),
+            '#' => out.push_str("%23"),
+            '&' => out.push_str("%26"),
+            ' ' => out.push_str("%20"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// Classify a single `[[package]]` entry from Cargo.lock.
 /// Returns `Some(dep)` if it should appear in resolved_dependencies,
 /// `None` if it's a workspace member (skip), or `Err` if unaccounted-for.
@@ -280,7 +296,10 @@ fn classify_package(
                     git_commit: commit.to_string(),
                 },
                 name: name.to_string(),
-                uri: format!("pkg:cargo/{name}@{version}?vcs_url=git+{url}@{commit}"),
+                uri: format!(
+                    "pkg:cargo/{name}@{version}?vcs_url=git+{}@{commit}",
+                    pct_encode(url)
+                ),
             }))
         }
         Some(other) => Err(anyhow!(
@@ -310,7 +329,10 @@ fn classify_package(
                         git_commit: commit.clone(),
                     },
                     name: name.to_string(),
-                    uri: format!("pkg:cargo/{name}@{version}?vcs_url=git+file:{relpath}@{commit}"),
+                    uri: format!(
+                        "pkg:cargo/{name}@{version}?vcs_url=git+file:{}@{commit}",
+                        pct_encode(&relpath)
+                    ),
                 }))
             } else {
                 Ok(None)
@@ -809,6 +831,17 @@ ext = { path = "../../../ext" }
     }
 
     #[test]
+    fn pct_encode_handles_purl_breaking_chars() {
+        assert_eq!(pct_encode("plain"), "plain");
+        assert_eq!(pct_encode("a?b#c&d e"), "a%3Fb%23c%26d%20e");
+        // The `=` and `@` chars are NOT encoded; they're not problematic
+        // inside a PURL qualifier value.
+        assert_eq!(pct_encode("a=b@c"), "a=b@c");
+        // / and : pass through (URLs need them readable)
+        assert_eq!(pct_encode("https://x.y/z"), "https://x.y/z");
+    }
+
+    #[test]
     fn classify_registry_dep_with_checksum() {
         let pkg = pkg_from_toml(
             r#"
@@ -881,7 +914,7 @@ source = "git+https://github.com/lunal-dev/attestation-rs?branch=usize#952489ea3
             .unwrap();
         assert_eq!(
             dep.uri,
-            "pkg:cargo/attestation@0.4.0?vcs_url=git+https://github.com/lunal-dev/attestation-rs?branch=usize@952489ea39cbb300828af5c1268eff3387cfe4b5"
+            "pkg:cargo/attestation@0.4.0?vcs_url=git+https://github.com/lunal-dev/attestation-rs%3Fbranch=usize@952489ea39cbb300828af5c1268eff3387cfe4b5"
         );
         match dep.digest {
             Digest::GitCommit { git_commit } => {

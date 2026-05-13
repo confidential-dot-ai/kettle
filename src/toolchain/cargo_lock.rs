@@ -2,6 +2,7 @@ use anyhow::{Context as _, Result, anyhow};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::provenance::{Digest, ResolvedDependency};
 use crate::toolchain::driver::git_cmd;
 
 /// Error if `path` is a git repository with uncommitted changes
@@ -197,9 +198,86 @@ fn extract_paths_from_manifest(
     Ok(())
 }
 
+/// Classify a single `[[package]]` entry from Cargo.lock.
+/// Returns `Some(dep)` if it should appear in resolved_dependencies,
+/// `None` if it's a workspace member (skip), or `Err` if unaccounted-for.
+fn classify_package(
+    pkg: &toml::Value,
+    external_paths: &HashMap<String, PathBuf>,
+) -> Result<Option<ResolvedDependency>> {
+    let name = pkg
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("lockfile package missing name field"))?;
+    let version = pkg
+        .get("version")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("lockfile package `{name}` missing version field"))?;
+    let source = pkg.get("source").and_then(|v| v.as_str());
+
+    match source {
+        Some(src) if src.starts_with("registry+") => {
+            let checksum = pkg
+                .get("checksum")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "cargo dependency {name}@{version} from registry has no checksum"
+                    )
+                })?;
+            Ok(Some(ResolvedDependency {
+                annotations: None,
+                digest: Digest::Sha256 {
+                    sha256: checksum.to_string(),
+                },
+                name: name.to_string(),
+                uri: format!(
+                    "pkg:cargo/{name}@{version}?checksum=sha256:{checksum}"
+                ),
+            }))
+        }
+        Some(src) if src.starts_with("git+") => {
+            // Strip "git+" prefix, split on '#' to separate url and commit.
+            let rest = &src["git+".len()..];
+            let (url, commit) = rest
+                .rsplit_once('#')
+                .ok_or_else(|| {
+                    anyhow!(
+                        "cargo dependency {name}@{version} has git source without commit: {src}"
+                    )
+                })?;
+            Ok(Some(ResolvedDependency {
+                annotations: None,
+                digest: Digest::GitCommit {
+                    git_commit: commit.to_string(),
+                },
+                name: name.to_string(),
+                uri: format!("pkg:cargo/{name}@{version}?vcs_url=git+{url}@{commit}"),
+            }))
+        }
+        Some(other) => Err(anyhow!(
+            "cargo dependency {name}@{version} has unrecognized source: {other}"
+        )),
+        None => {
+            // No source: either workspace member or external path dep.
+            // Task 7 fills in the external-path branch.
+            if external_paths.contains_key(name) {
+                // Placeholder until Task 7 — will be replaced.
+                Err(anyhow!(
+                    "external path dep handling not yet implemented for {name}"
+                ))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provenance::{Digest, ResolvedDependency};
+    use pretty_assertions::assert_eq;
     use std::process::Command;
     use tempfile::TempDir;
 
@@ -636,6 +714,130 @@ ext = { path = "../../../ext" }
         let map = collect_external_path_deps(&project_dir).unwrap();
         assert_eq!(map.len(), 1, "got {map:?}");
         assert!(map.contains_key("ext"));
+    }
+
+    fn pkg_from_toml(toml_str: &str) -> toml::Value {
+        toml::from_str(toml_str).unwrap()
+    }
+
+    #[test]
+    fn classify_registry_dep_with_checksum() {
+        let pkg = pkg_from_toml(
+            r#"
+name = "serde"
+version = "1.0.228"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc"
+"#,
+        );
+        let empty: HashMap<String, PathBuf> = HashMap::new();
+        let dep = classify_package(&pkg, &empty).unwrap().unwrap();
+        assert_eq!(dep.name, "serde");
+        assert_eq!(
+            dep.uri,
+            "pkg:cargo/serde@1.0.228?checksum=sha256:abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc"
+        );
+        match dep.digest {
+            Digest::Sha256 { sha256 } => {
+                assert_eq!(
+                    sha256,
+                    "abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc"
+                );
+            }
+            _ => panic!("expected Sha256 digest"),
+        }
+    }
+
+    #[test]
+    fn classify_git_dep() {
+        let pkg = pkg_from_toml(
+            r#"
+name = "sev"
+version = "7.1.0"
+source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e12c8"
+"#,
+        );
+        let empty: HashMap<String, PathBuf> = HashMap::new();
+        let dep = classify_package(&pkg, &empty).unwrap().unwrap();
+        assert_eq!(dep.name, "sev");
+        assert_eq!(
+            dep.uri,
+            "pkg:cargo/sev@7.1.0?vcs_url=git+https://github.com/virtee/sev@900d42d6a1f9102ed52faa3a3889b54e8a7e12c8"
+        );
+        match dep.digest {
+            Digest::GitCommit { git_commit } => {
+                assert_eq!(git_commit, "900d42d6a1f9102ed52faa3a3889b54e8a7e12c8");
+            }
+            _ => panic!("expected GitCommit digest"),
+        }
+    }
+
+    #[test]
+    fn classify_git_dep_with_query_string_in_url() {
+        // Git source URLs frequently carry ?branch=... or ?rev=... in the query.
+        // The split must be at the LAST '#', not the first.
+        let pkg = pkg_from_toml(
+            r#"
+name = "attestation"
+version = "0.4.0"
+source = "git+https://github.com/lunal-dev/attestation-rs?branch=usize#952489ea39cbb300828af5c1268eff3387cfe4b5"
+"#,
+        );
+        let empty: HashMap<String, PathBuf> = HashMap::new();
+        let dep = classify_package(&pkg, &empty).unwrap().unwrap();
+        assert_eq!(
+            dep.uri,
+            "pkg:cargo/attestation@0.4.0?vcs_url=git+https://github.com/lunal-dev/attestation-rs?branch=usize@952489ea39cbb300828af5c1268eff3387cfe4b5"
+        );
+        match dep.digest {
+            Digest::GitCommit { git_commit } => {
+                assert_eq!(git_commit, "952489ea39cbb300828af5c1268eff3387cfe4b5");
+            }
+            _ => panic!("expected GitCommit digest"),
+        }
+    }
+
+    #[test]
+    fn classify_workspace_member_is_none() {
+        let pkg = pkg_from_toml(
+            r#"
+name = "my-project"
+version = "0.1.0"
+"#,
+        );
+        let empty: HashMap<String, PathBuf> = HashMap::new();
+        let result = classify_package(&pkg, &empty).unwrap();
+        assert!(result.is_none(), "workspace member should return None");
+    }
+
+    #[test]
+    fn classify_registry_without_checksum_errors() {
+        let pkg = pkg_from_toml(
+            r#"
+name = "foo"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+"#,
+        );
+        let empty: HashMap<String, PathBuf> = HashMap::new();
+        let err = classify_package(&pkg, &empty).unwrap_err().to_string();
+        assert!(err.contains("no checksum"), "error: {err}");
+        assert!(err.contains("foo"), "error: {err}");
+    }
+
+    #[test]
+    fn classify_unknown_source_errors() {
+        let pkg = pkg_from_toml(
+            r#"
+name = "weird"
+version = "0.0.1"
+source = "ftp://example.com/weird.tar.gz"
+"#,
+        );
+        let empty: HashMap<String, PathBuf> = HashMap::new();
+        let err = classify_package(&pkg, &empty).unwrap_err().to_string();
+        assert!(err.contains("unrecognized source"), "error: {err}");
+        assert!(err.contains("ftp"), "error: {err}");
     }
 
     #[test]

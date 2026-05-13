@@ -9,7 +9,7 @@ use axum::{
 };
 
 use crate::api::BuildRequest;
-use crate::server::api::{AppState, JobRunner, health, post_build};
+use crate::server::api::{AppState, JobRunner, get_events, health, post_build};
 use crate::server::job::JobRegistry;
 
 pub fn router() -> Router {
@@ -25,6 +25,7 @@ pub fn router_with_runner(runner: Arc<dyn JobRunner>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/build", post(post_build))
+        .route("/build/{id}/events", get(get_events))
         .with_state(state)
 }
 

@@ -1,8 +1,12 @@
+use std::convert::Infallible;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+use futures_util::stream::{Stream, StreamExt};
 
 use crate::api::{BuildRequest, JobIdResponse};
 use crate::server::job::{JobRegistry, RegistryError};
@@ -52,4 +56,30 @@ fn validate_nonce(nonce: &str) -> Result<Vec<u8>, (StatusCode, String)> {
         return Err((StatusCode::BAD_REQUEST, "nonce must be at most 16 bytes".into()));
     }
     Ok(bytes)
+}
+
+pub async fn get_events(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl axum::response::IntoResponse, StatusCode> {
+    let job = state.registry.get(&id).ok_or(StatusCode::NOT_FOUND)?;
+    let backlog = job.snapshot_events().await;
+    let rx = job.subscribe();
+
+    let backlog_stream = futures_util::stream::iter(
+        backlog.into_iter().map(|e| Ok::<_, Infallible>(to_sse(e)))
+    );
+
+    let live_stream = tokio_stream::wrappers::BroadcastStream::new(rx)
+        .filter_map(|res| async move {
+            res.ok().map(|e| Ok::<_, Infallible>(to_sse(e)))
+        });
+
+    let stream: Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>> =
+        Box::pin(backlog_stream.chain(live_stream));
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+fn to_sse(event: crate::api::Event) -> SseEvent {
+    SseEvent::default().data(serde_json::to_string(&event).unwrap())
 }

@@ -39,6 +39,36 @@ impl ServerJob {
     }
 }
 
+impl ServerJob {
+    pub async fn push_event(&self, event: Event) {
+        self.event_log.lock().await.push(event.clone());
+        let _ = self.events.send(event);
+    }
+
+    pub async fn mark_done(&self) {
+        *self.state.lock().await = ServerJobState::Done;
+    }
+
+    pub async fn mark_failed(&self, error: String, error_type: String) {
+        *self.state.lock().await = ServerJobState::Failed { error, error_type };
+    }
+
+    pub async fn snapshot_events(&self) -> Vec<Event> {
+        self.event_log.lock().await.clone()
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<Event> {
+        self.events.subscribe()
+    }
+
+    pub async fn is_terminal(&self) -> bool {
+        matches!(
+            *self.state.lock().await,
+            ServerJobState::Done | ServerJobState::Failed { .. }
+        )
+    }
+}
+
 pub struct JobRegistry {
     gate: AtomicBool,
     inner: DashMap<JobId, Arc<ServerJob>>,

@@ -7,7 +7,7 @@ build = "build.rs"
 
 [features]
 attest = ["attestation/attest"]
-server = ["dep:axum", "dep:tar", "dep:zip", "dep:dashmap", "dep:tempfile"]
+server = ["dep:axum", "dep:tar", "dep:zip", "dep:dashmap", "dep:tempfile", "dep:tokio-stream", "dep:futures-util"]
 
 [dependencies]
 anyhow = "1.0.101"

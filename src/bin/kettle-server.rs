@@ -79,30 +79,34 @@ async fn do_build(
 ) -> Result<(StatusCode, [(&'static str, &'static str); 1], Vec<u8>), (StatusCode, String)> {
     let work_dir = create_work_dir()?;
 
+    #[cfg(feature = "attest")]
+    let build_nonce: String;
+
     let project_dir = match args {
         BuildArgs::Repo {
             repo_url,
             repo_ref,
             nonce,
         } => {
-            validate_nonce(nonce)?;
+            build_nonce = validate_nonce(nonce)?;
             repo_setup(&repo_url, repo_ref, &work_dir).await?
         }
         BuildArgs::Tarball {
             tarball_data,
             nonce,
         } => {
-            validate_nonce(nonce)?;
+            build_nonce = validate_nonce(nonce)?;
             tarball_setup(&tarball_data, &work_dir).await?
         }
     };
 
     #[cfg(feature = "attest")]
     {
-        commands::attest::attest(AttestArgs {
+        commands::attest::attest(commands::attest::AttestArgs {
             path: project_dir.clone(),
-            nonce: Some(args.nonce),
+            nonce: Some(build_nonce),
         })
+        .await
         .map_err(|e| (StatusCode::CONFLICT, format!("build failed: {e}")))?;
     }
 
@@ -236,7 +240,7 @@ fn find_project_dir(work_dir: &PathBuf) -> Result<PathBuf, String> {
     Ok(work_dir.clone())
 }
 
-fn validate_nonce(nonce: &str) -> Result<(), (StatusCode, String)> {
+fn validate_nonce(nonce: &str) -> Result<String, (StatusCode, String)> {
     let nonce_bytes = hex::decode(nonce)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid nonce hex: {e}")))?;
     if nonce_bytes.len() > 32 {
@@ -245,5 +249,5 @@ fn validate_nonce(nonce: &str) -> Result<(), (StatusCode, String)> {
             "nonce must be at most 32 bytes".to_string(),
         ));
     };
-    Ok(())
+    Ok(nonce.to_string())
 }

@@ -49,7 +49,7 @@ async fn health() -> &'static str {
 enum BuildArgs {
     Repo {
         repo_url: String,
-        repo_ref: String,
+        repo_ref: Option<String>,
         nonce: String,
     },
     Tarball {
@@ -86,7 +86,7 @@ async fn do_build(
             nonce,
         } => {
             validate_nonce(nonce)?;
-            repo_setup(&repo_url, &repo_ref, &work_dir).await?
+            repo_setup(&repo_url, repo_ref, &work_dir).await?
         }
         BuildArgs::Tarball {
             tarball_data,
@@ -146,24 +146,20 @@ async fn do_build(
 
 async fn repo_setup(
     repo_url: &str,
-    repo_ref: &str,
+    repo_ref: &Option<String>,
     work_dir: &PathBuf,
 ) -> Result<PathBuf, (StatusCode, String)> {
-    let output = std::process::Command::new("git")
-        .args([
-            "clone",
-            "--revision",
-            repo_ref,
-            "--depth",
-            "1",
-            "--",
-            repo_url,
-        ])
+    let mut args = vec!["clone"];
+    if let Some(repo_ref) = repo_ref {
+        let repo_ref = repo_ref;
+        args.extend(vec!["--revision", repo_ref]);
+    }
+    args.extend(vec!["--depth", "1", "--", repo_url]);
+    std::process::Command::new("git")
+        .args(args)
         .current_dir(&work_dir)
         .output()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("git clone: {e}")))?;
-    println!("{}", String::from_utf8_lossy(&output.stdout));
-    println!("{}", String::from_utf8_lossy(&output.stderr));
 
     let project_dir = find_project_dir(&work_dir)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("bad project layout: {e}")))?;

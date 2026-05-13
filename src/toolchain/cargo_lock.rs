@@ -198,12 +198,41 @@ fn extract_paths_from_manifest(
     Ok(())
 }
 
+/// Compute the path from `from` to `to` using `..` segments as needed.
+/// Both paths must be absolute and canonicalized. Returns a relative
+/// `PathBuf` like `../sibling`.
+fn relative_path(from: &Path, to: &Path) -> PathBuf {
+    let mut from_iter = from.components();
+    let mut to_iter = to.components();
+    // Skip the common prefix
+    loop {
+        let from_peek = from_iter.clone().next();
+        let to_peek = to_iter.clone().next();
+        match (from_peek, to_peek) {
+            (Some(f), Some(t)) if f == t => {
+                from_iter.next();
+                to_iter.next();
+            }
+            _ => break,
+        }
+    }
+    let mut result = PathBuf::new();
+    for _ in from_iter {
+        result.push("..");
+    }
+    for c in to_iter {
+        result.push(c.as_os_str());
+    }
+    result
+}
+
 /// Classify a single `[[package]]` entry from Cargo.lock.
 /// Returns `Some(dep)` if it should appear in resolved_dependencies,
 /// `None` if it's a workspace member (skip), or `Err` if unaccounted-for.
 fn classify_package(
     pkg: &toml::Value,
     external_paths: &HashMap<String, PathBuf>,
+    project_canon: &Path,
 ) -> Result<Option<ResolvedDependency>> {
     let name = pkg
         .get("name")
@@ -260,12 +289,32 @@ fn classify_package(
         )),
         None => {
             // No source: either workspace member or external path dep.
-            // Task 7 fills in the external-path branch.
-            if external_paths.contains_key(name) {
-                // Placeholder until Task 7 — will be replaced.
-                Err(anyhow!(
-                    "external path dep handling not yet implemented for {name}"
-                ))
+            if let Some(abs_path) = external_paths.get(name) {
+                assert_clean(abs_path).map_err(|e| {
+                    anyhow!(
+                        "verifying path dependency {name} at {}: {e}",
+                        abs_path.display()
+                    )
+                })?;
+                let commit = git_sha_at(abs_path).map_err(|e| {
+                    anyhow!(
+                        "path dependency {name} at {} is not a git repository: {e}",
+                        abs_path.display()
+                    )
+                })?;
+                let relpath = relative_path(project_canon, abs_path)
+                    .to_string_lossy()
+                    .to_string();
+                Ok(Some(ResolvedDependency {
+                    annotations: None,
+                    digest: Digest::GitCommit {
+                        git_commit: commit.clone(),
+                    },
+                    name: name.to_string(),
+                    uri: format!(
+                        "pkg:cargo/{name}@{version}?vcs_url=git+file:{relpath}@{commit}"
+                    ),
+                }))
             } else {
                 Ok(None)
             }
@@ -276,7 +325,7 @@ fn classify_package(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provenance::{Digest, ResolvedDependency};
+    use crate::provenance::Digest;
     use pretty_assertions::assert_eq;
     use std::process::Command;
     use tempfile::TempDir;
@@ -731,7 +780,7 @@ checksum = "abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let dep = classify_package(&pkg, &empty).unwrap().unwrap();
+        let dep = classify_package(&pkg, &empty, Path::new("/")).unwrap().unwrap();
         assert_eq!(dep.name, "serde");
         assert_eq!(
             dep.uri,
@@ -758,7 +807,7 @@ source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let dep = classify_package(&pkg, &empty).unwrap().unwrap();
+        let dep = classify_package(&pkg, &empty, Path::new("/")).unwrap().unwrap();
         assert_eq!(dep.name, "sev");
         assert_eq!(
             dep.uri,
@@ -784,7 +833,7 @@ source = "git+https://github.com/lunal-dev/attestation-rs?branch=usize#952489ea3
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let dep = classify_package(&pkg, &empty).unwrap().unwrap();
+        let dep = classify_package(&pkg, &empty, Path::new("/")).unwrap().unwrap();
         assert_eq!(
             dep.uri,
             "pkg:cargo/attestation@0.4.0?vcs_url=git+https://github.com/lunal-dev/attestation-rs?branch=usize@952489ea39cbb300828af5c1268eff3387cfe4b5"
@@ -806,7 +855,7 @@ version = "0.1.0"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let result = classify_package(&pkg, &empty).unwrap();
+        let result = classify_package(&pkg, &empty, Path::new("/")).unwrap();
         assert!(result.is_none(), "workspace member should return None");
     }
 
@@ -820,7 +869,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let err = classify_package(&pkg, &empty).unwrap_err().to_string();
+        let err = classify_package(&pkg, &empty, Path::new("/")).unwrap_err().to_string();
         assert!(err.contains("no checksum"), "error: {err}");
         assert!(err.contains("foo"), "error: {err}");
     }
@@ -835,7 +884,7 @@ source = "ftp://example.com/weird.tar.gz"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let err = classify_package(&pkg, &empty).unwrap_err().to_string();
+        let err = classify_package(&pkg, &empty, Path::new("/")).unwrap_err().to_string();
         assert!(err.contains("unrecognized source"), "error: {err}");
         assert!(err.contains("ftp"), "error: {err}");
     }
@@ -881,8 +930,97 @@ source = "git+https://github.com/virtee/sev"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let err = classify_package(&pkg, &empty).unwrap_err().to_string();
+        let err = classify_package(&pkg, &empty, Path::new("/")).unwrap_err().to_string();
         assert!(err.contains("without commit"), "error: {err}");
         assert!(err.contains("sev"), "error: {err}");
+    }
+
+    #[test]
+    fn classify_external_path_dep_clean() {
+        let repo = init_repo();
+        let head = git_sha_at(repo.path()).unwrap();
+
+        let project = TempDir::new().unwrap();
+        let project_canon = fs_err::canonicalize(project.path()).unwrap();
+
+        let mut external_paths = HashMap::new();
+        external_paths.insert("ext".to_string(), repo.path().to_path_buf());
+
+        let pkg = pkg_from_toml(
+            r#"
+name = "ext"
+version = "0.1.0"
+"#,
+        );
+        let dep = classify_package(&pkg, &external_paths, &project_canon)
+            .unwrap()
+            .unwrap();
+        assert_eq!(dep.name, "ext");
+        match &dep.digest {
+            Digest::GitCommit { git_commit } => assert_eq!(git_commit, &head),
+            _ => panic!("expected GitCommit digest"),
+        }
+        assert!(dep.uri.starts_with("pkg:cargo/ext@0.1.0?vcs_url=git+file:"));
+        assert!(dep.uri.ends_with(&format!("@{head}")));
+        // Relpath must be `../`-relative so provenance is reproducible across machines.
+        assert!(
+            dep.uri.contains("git+file:.."),
+            "URI relpath should be ../-relative, got: {}",
+            dep.uri
+        );
+        assert!(
+            !dep.uri.contains(&format!("git+file:{}", repo.path().display())),
+            "URI must not contain machine-specific absolute path: {}",
+            dep.uri
+        );
+    }
+
+    #[test]
+    fn classify_external_path_dep_dirty_errors() {
+        let repo = init_repo();
+        // Make the repo dirty
+        fs_err::write(repo.path().join("file.txt"), "modified").unwrap();
+
+        let project = TempDir::new().unwrap();
+        let project_canon = fs_err::canonicalize(project.path()).unwrap();
+
+        let mut external_paths = HashMap::new();
+        external_paths.insert("ext".to_string(), repo.path().to_path_buf());
+
+        let pkg = pkg_from_toml(
+            r#"
+name = "ext"
+version = "0.1.0"
+"#,
+        );
+        let err = classify_package(&pkg, &external_paths, &project_canon)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("uncommitted changes"), "error: {err}");
+        assert!(err.contains("ext"), "error should mention dep name: {err}");
+    }
+
+    #[test]
+    fn classify_external_path_dep_not_a_repo_errors() {
+        let non_repo = TempDir::new().unwrap();
+        let project = TempDir::new().unwrap();
+        let project_canon = fs_err::canonicalize(project.path()).unwrap();
+
+        let mut external_paths = HashMap::new();
+        external_paths.insert("ext".to_string(), non_repo.path().to_path_buf());
+
+        let pkg = pkg_from_toml(
+            r#"
+name = "ext"
+version = "0.1.0"
+"#,
+        );
+        let err = classify_package(&pkg, &external_paths, &project_canon)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("not a git repository") || err.contains("git rev-parse"),
+            "error should indicate it's not a git repo: {err}"
+        );
     }
 }

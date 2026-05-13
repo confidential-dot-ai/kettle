@@ -358,33 +358,37 @@ mod tests {
     use std::process::Command;
     use tempfile::TempDir;
 
-    /// Initialize a tempdir as a git repo with a single committed file.
-    /// Returns the tempdir (kept alive by the caller).
-    fn init_repo() -> TempDir {
-        let dir = TempDir::new().unwrap();
-        let p = dir.path();
-        Command::new("git").args(["init"]).current_dir(p).output().unwrap();
+    /// Initialize an existing directory as a git repo with one committed file.
+    fn init_repo_at(path: &std::path::Path) {
+        Command::new("git").args(["init"]).current_dir(path).output().unwrap();
         Command::new("git")
             .args(["config", "user.email", "test@example.com"])
-            .current_dir(p)
+            .current_dir(path)
             .output()
             .unwrap();
         Command::new("git")
             .args(["config", "user.name", "Test"])
-            .current_dir(p)
+            .current_dir(path)
             .output()
             .unwrap();
-        fs_err::write(p.join("file.txt"), "hello").unwrap();
+        fs_err::write(path.join("file.txt"), "hello").unwrap();
         Command::new("git")
             .args(["add", "file.txt"])
-            .current_dir(p)
+            .current_dir(path)
             .output()
             .unwrap();
         Command::new("git")
             .args(["commit", "-n", "-m", "init"])
-            .current_dir(p)
+            .current_dir(path)
             .output()
             .unwrap();
+    }
+
+    /// Initialize a tempdir as a git repo with a single committed file.
+    /// Returns the tempdir (kept alive by the caller).
+    fn init_repo() -> TempDir {
+        let dir = TempDir::new().unwrap();
+        init_repo_at(dir.path());
         dir
     }
 
@@ -1122,5 +1126,125 @@ version = "0.1.0"
         let deps =
             resolve_dependencies(project.path(), b"[metadata]\nkey = \"value\"").unwrap();
         assert!(deps.is_empty());
+    }
+
+    #[test]
+    fn resolve_dependencies_with_git_and_external_path_deps() {
+        let parent = TempDir::new().unwrap();
+        let project_dir = parent.path().join("project");
+        let external_repo = parent.path().join("ext");
+        fs_err::create_dir_all(&project_dir).unwrap();
+        fs_err::create_dir_all(&external_repo).unwrap();
+
+        // Initialize external as a git repo with one committed file.
+        init_repo_at(&external_repo);
+        let head =
+            git_cmd(&external_repo.to_path_buf(), &["rev-parse", "HEAD"]).unwrap();
+
+        // Project Cargo.toml declares the external path dep.
+        write_manifest(
+            &project_dir,
+            r#"
+[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies]
+ext = { path = "../ext" }
+"#,
+        );
+
+        // A synthetic Cargo.lock with three entries: workspace, git, external path.
+        let lockfile = r#"
+version = 4
+
+[[package]]
+name = "demo"
+version = "0.1.0"
+
+[[package]]
+name = "ext"
+version = "0.1.0"
+
+[[package]]
+name = "sev"
+version = "7.1.0"
+source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e12c8"
+"#;
+
+        let deps = resolve_dependencies(&project_dir, lockfile.as_bytes()).unwrap();
+        assert_eq!(deps.len(), 2, "demo workspace member should be excluded; got {deps:?}");
+
+        let ext = deps.iter().find(|d| d.name == "ext").expect("ext dep present");
+        match &ext.digest {
+            Digest::GitCommit { git_commit } => assert_eq!(git_commit, &head),
+            _ => panic!("expected GitCommit digest for ext"),
+        }
+        assert!(
+            ext.uri.contains("?vcs_url=git+file:"),
+            "ext uri should encode file vcs_url: {}",
+            ext.uri
+        );
+        assert!(ext.uri.ends_with(&format!("@{head}")));
+        assert!(
+            ext.uri.contains("git+file:.."),
+            "URI relpath should be ../-relative, got: {}",
+            ext.uri
+        );
+        assert!(
+            !ext.uri.contains(external_repo.to_str().unwrap()),
+            "URI must not leak machine-specific absolute path, got: {}",
+            ext.uri
+        );
+
+        let sev = deps.iter().find(|d| d.name == "sev").expect("sev dep present");
+        match &sev.digest {
+            Digest::GitCommit { git_commit } => {
+                assert_eq!(git_commit, "900d42d6a1f9102ed52faa3a3889b54e8a7e12c8");
+            }
+            _ => panic!("expected GitCommit digest for sev"),
+        }
+        assert_eq!(
+            sev.uri,
+            "pkg:cargo/sev@7.1.0?vcs_url=git+https://github.com/virtee/sev@900d42d6a1f9102ed52faa3a3889b54e8a7e12c8"
+        );
+    }
+
+    #[test]
+    fn resolve_dependencies_aborts_on_dirty_external_path() {
+        let parent = TempDir::new().unwrap();
+        let project_dir = parent.path().join("project");
+        let external_repo = parent.path().join("ext");
+        fs_err::create_dir_all(&project_dir).unwrap();
+        fs_err::create_dir_all(&external_repo).unwrap();
+        init_repo_at(&external_repo);
+        // Add an untracked file to make it dirty
+        fs_err::write(external_repo.join("untracked.rs"), "fn x() {}").unwrap();
+
+        write_manifest(
+            &project_dir,
+            r#"
+[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies]
+ext = { path = "../ext" }
+"#,
+        );
+
+        let lockfile = r#"
+version = 4
+
+[[package]]
+name = "ext"
+version = "0.1.0"
+"#;
+
+        let err = resolve_dependencies(&project_dir, lockfile.as_bytes())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("uncommitted changes"), "error: {err}");
+        assert!(err.contains("untracked.rs"), "error should name untracked: {err}");
     }
 }

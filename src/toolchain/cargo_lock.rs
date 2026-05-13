@@ -19,6 +19,11 @@ fn assert_clean(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Return the SHA of HEAD at `path`. Errors if `path` is not a git repository.
+fn git_sha_at(path: &Path) -> Result<String> {
+    git_cmd(&path.to_path_buf(), &["rev-parse", "HEAD"])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +85,20 @@ mod tests {
         let err = assert_clean(repo.path()).unwrap_err().to_string();
         assert!(err.contains("uncommitted changes"), "error: {err}");
         assert!(err.contains("new.txt"), "error: {err}");
+    }
+
+    #[test]
+    fn git_sha_at_returns_head_commit() {
+        let repo = init_repo();
+        let sha = git_sha_at(repo.path()).unwrap();
+        assert_eq!(sha.len(), 40, "expected 40-char SHA, got: {sha}");
+        assert!(sha.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn git_sha_at_errors_on_non_repo() {
+        let dir = TempDir::new().unwrap();
+        let result = git_sha_at(dir.path());
+        assert!(result.is_err());
     }
 }

@@ -46,16 +46,21 @@ async fn health() -> &'static str {
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
-enum BuildArgs {
+enum BuildSource {
     Repo {
         repo_url: String,
         repo_ref: Option<String>,
-        nonce: String,
     },
     Tarball {
         tarball_data: Vec<u8>,
-        nonce: String,
     },
+}
+
+#[derive(Deserialize, Debug)]
+struct BuildArgs {
+    #[serde(flatten)]
+    source: BuildSource,
+    nonce: String,
 }
 
 async fn build_handler(
@@ -78,33 +83,19 @@ async fn do_build(
     args: &BuildArgs,
 ) -> Result<(StatusCode, [(&'static str, &'static str); 1], Vec<u8>), (StatusCode, String)> {
     let work_dir = create_work_dir()?;
-
-    #[cfg(feature = "attest")]
-    let build_nonce: String;
-
-    let project_dir = match args {
-        BuildArgs::Repo {
-            repo_url,
-            repo_ref,
-            nonce,
-        } => {
-            build_nonce = validate_nonce(nonce)?;
-            repo_setup(&repo_url, repo_ref, &work_dir).await?
+    let _build_nonce = validate_nonce(&args.nonce)?;
+    let project_dir = match &args.source {
+        BuildSource::Repo { repo_url, repo_ref } => {
+            repo_setup(&repo_url, &repo_ref, &work_dir).await?
         }
-        BuildArgs::Tarball {
-            tarball_data,
-            nonce,
-        } => {
-            build_nonce = validate_nonce(nonce)?;
-            tarball_setup(&tarball_data, &work_dir).await?
-        }
+        BuildSource::Tarball { tarball_data } => tarball_setup(&tarball_data, &work_dir).await?,
     };
 
     #[cfg(feature = "attest")]
     {
         commands::attest::attest(commands::attest::AttestArgs {
             path: project_dir.clone(),
-            nonce: Some(build_nonce),
+            nonce: Some(_build_nonce),
         })
         .await
         .map_err(|e| (StatusCode::CONFLICT, format!("build failed: {e}")))?;

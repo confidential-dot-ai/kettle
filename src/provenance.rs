@@ -116,8 +116,12 @@ pub struct Subject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub(crate) enum Digest {
-    Sha256 { sha256: String },
-    Sha512 { sha512: String },
+    Sha256 {
+        sha256: String,
+    },
+    Sha512 {
+        sha512: String,
+    },
     GitCommit {
         #[serde(rename = "gitCommit")]
         git_commit: String,

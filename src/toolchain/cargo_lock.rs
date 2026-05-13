@@ -51,12 +51,11 @@ fn discover_manifests(project_canon: &Path) -> Result<Vec<PathBuf>> {
     let mut manifests = vec![root.clone()];
 
     // If the root manifest has a [workspace] section, expand its members.
-    let bytes = fs_err::read(&root)
-        .with_context(|| format!("read manifest {}", root.display()))?;
+    let bytes = fs_err::read(&root).with_context(|| format!("read manifest {}", root.display()))?;
     let text = std::str::from_utf8(&bytes)
         .with_context(|| format!("manifest {} is not utf-8", root.display()))?;
-    let doc: toml::Value = toml::from_str(text)
-        .with_context(|| format!("parse manifest {}", root.display()))?;
+    let doc: toml::Value =
+        toml::from_str(text).with_context(|| format!("parse manifest {}", root.display()))?;
 
     let Some(workspace) = doc.get("workspace").and_then(|v| v.as_table()) else {
         return Ok(manifests);
@@ -65,7 +64,9 @@ fn discover_manifests(project_canon: &Path) -> Result<Vec<PathBuf>> {
         return Ok(manifests);
     };
     for member in members {
-        let Some(pattern) = member.as_str() else { continue };
+        let Some(pattern) = member.as_str() else {
+            continue;
+        };
         let is_glob = pattern.contains('*');
         for member_dir in expand_member_pattern(project_canon, pattern)? {
             let m = member_dir.join("Cargo.toml");
@@ -138,7 +139,9 @@ fn extract_paths_from_manifest(
 
     let mut visit_dep_table = |table: &toml::value::Table| -> Result<()> {
         for (name, value) in table {
-            let Some(dep_table) = value.as_table() else { continue };
+            let Some(dep_table) = value.as_table() else {
+                continue;
+            };
             let Some(rel_path) = dep_table.get("path").and_then(|v| v.as_str()) else {
                 continue;
             };
@@ -178,7 +181,9 @@ fn extract_paths_from_manifest(
     // [target.*.dependencies], [target.*.dev-dependencies], [target.*.build-dependencies]
     if let Some(targets) = doc.get("target").and_then(|v| v.as_table()) {
         for (_triple, target_block) in targets {
-            let Some(tt) = target_block.as_table() else { continue };
+            let Some(tt) = target_block.as_table() else {
+                continue;
+            };
             for key in ["dependencies", "dev-dependencies", "build-dependencies"] {
                 if let Some(t) = tt.get(key).and_then(|v| v.as_table()) {
                     visit_dep_table(t)?;
@@ -190,7 +195,9 @@ fn extract_paths_from_manifest(
     // [patch.<registry-or-url>]
     if let Some(patch) = doc.get("patch").and_then(|v| v.as_table()) {
         for (_registry, patch_block) in patch {
-            let Some(pt) = patch_block.as_table() else { continue };
+            let Some(pt) = patch_block.as_table() else {
+                continue;
+            };
             visit_dep_table(pt)?;
         }
     }
@@ -250,9 +257,7 @@ fn classify_package(
                 .get("checksum")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| {
-                    anyhow!(
-                        "cargo dependency {name}@{version} from registry has no checksum"
-                    )
+                    anyhow!("cargo dependency {name}@{version} from registry has no checksum")
                 })?;
             Ok(Some(ResolvedDependency {
                 annotations: None,
@@ -260,21 +265,15 @@ fn classify_package(
                     sha256: checksum.to_string(),
                 },
                 name: name.to_string(),
-                uri: format!(
-                    "pkg:cargo/{name}@{version}?checksum=sha256:{checksum}"
-                ),
+                uri: format!("pkg:cargo/{name}@{version}?checksum=sha256:{checksum}"),
             }))
         }
         Some(src) if src.starts_with("git+") => {
             // Strip "git+" prefix, split on '#' to separate url and commit.
             let rest = &src["git+".len()..];
-            let (url, commit) = rest
-                .rsplit_once('#')
-                .ok_or_else(|| {
-                    anyhow!(
-                        "cargo dependency {name}@{version} has git source without commit: {src}"
-                    )
-                })?;
+            let (url, commit) = rest.rsplit_once('#').ok_or_else(|| {
+                anyhow!("cargo dependency {name}@{version} has git source without commit: {src}")
+            })?;
             Ok(Some(ResolvedDependency {
                 annotations: None,
                 digest: Digest::GitCommit {
@@ -311,9 +310,7 @@ fn classify_package(
                         git_commit: commit.clone(),
                     },
                     name: name.to_string(),
-                    uri: format!(
-                        "pkg:cargo/{name}@{version}?vcs_url=git+file:{relpath}@{commit}"
-                    ),
+                    uri: format!("pkg:cargo/{name}@{version}?vcs_url=git+file:{relpath}@{commit}"),
                 }))
             } else {
                 Ok(None)
@@ -360,7 +357,11 @@ mod tests {
 
     /// Initialize an existing directory as a git repo with one committed file.
     fn init_repo_at(path: &std::path::Path) {
-        Command::new("git").args(["init"]).current_dir(path).output().unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(path)
+            .output()
+            .unwrap();
         Command::new("git")
             .args(["config", "user.email", "test@example.com"])
             .current_dir(path)
@@ -682,7 +683,9 @@ version = "0.1.0"
 members = ["doesnotexist"]
 "#,
         );
-        let err = collect_external_path_deps(project.path()).unwrap_err().to_string();
+        let err = collect_external_path_deps(project.path())
+            .unwrap_err()
+            .to_string();
         assert!(
             err.contains("doesnotexist") || err.contains("no Cargo.toml"),
             "error should mention the missing member: {err}"
@@ -699,7 +702,9 @@ members = ["doesnotexist"]
 members = ["**/*"]
 "#,
         );
-        let err = collect_external_path_deps(project.path()).unwrap_err().to_string();
+        let err = collect_external_path_deps(project.path())
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("unsupported glob pattern"), "error: {err}");
     }
 
@@ -744,7 +749,9 @@ version = "0.1.0"
 ext = { path = "../../ext-b" }
 "#,
         );
-        let err = collect_external_path_deps(&project_dir).unwrap_err().to_string();
+        let err = collect_external_path_deps(&project_dir)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("conflicting"), "error: {err}");
     }
 
@@ -812,7 +819,9 @@ checksum = "abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let dep = classify_package(&pkg, &empty, Path::new("/")).unwrap().unwrap();
+        let dep = classify_package(&pkg, &empty, Path::new("/"))
+            .unwrap()
+            .unwrap();
         assert_eq!(dep.name, "serde");
         assert_eq!(
             dep.uri,
@@ -839,7 +848,9 @@ source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let dep = classify_package(&pkg, &empty, Path::new("/")).unwrap().unwrap();
+        let dep = classify_package(&pkg, &empty, Path::new("/"))
+            .unwrap()
+            .unwrap();
         assert_eq!(dep.name, "sev");
         assert_eq!(
             dep.uri,
@@ -865,7 +876,9 @@ source = "git+https://github.com/lunal-dev/attestation-rs?branch=usize#952489ea3
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let dep = classify_package(&pkg, &empty, Path::new("/")).unwrap().unwrap();
+        let dep = classify_package(&pkg, &empty, Path::new("/"))
+            .unwrap()
+            .unwrap();
         assert_eq!(
             dep.uri,
             "pkg:cargo/attestation@0.4.0?vcs_url=git+https://github.com/lunal-dev/attestation-rs?branch=usize@952489ea39cbb300828af5c1268eff3387cfe4b5"
@@ -901,7 +914,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let err = classify_package(&pkg, &empty, Path::new("/")).unwrap_err().to_string();
+        let err = classify_package(&pkg, &empty, Path::new("/"))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("no checksum"), "error: {err}");
         assert!(err.contains("foo"), "error: {err}");
     }
@@ -916,7 +931,9 @@ source = "ftp://example.com/weird.tar.gz"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let err = classify_package(&pkg, &empty, Path::new("/")).unwrap_err().to_string();
+        let err = classify_package(&pkg, &empty, Path::new("/"))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("unrecognized source"), "error: {err}");
         assert!(err.contains("ftp"), "error: {err}");
     }
@@ -962,7 +979,9 @@ source = "git+https://github.com/virtee/sev"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
-        let err = classify_package(&pkg, &empty, Path::new("/")).unwrap_err().to_string();
+        let err = classify_package(&pkg, &empty, Path::new("/"))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("without commit"), "error: {err}");
         assert!(err.contains("sev"), "error: {err}");
     }
@@ -1001,7 +1020,8 @@ version = "0.1.0"
             dep.uri
         );
         assert!(
-            !dep.uri.contains(&format!("git+file:{}", repo.path().display())),
+            !dep.uri
+                .contains(&format!("git+file:{}", repo.path().display())),
             "URI must not contain machine-specific absolute path: {}",
             dep.uri
         );
@@ -1123,8 +1143,7 @@ name = "demo"
 version = "0.1.0"
 "#,
         );
-        let deps =
-            resolve_dependencies(project.path(), b"[metadata]\nkey = \"value\"").unwrap();
+        let deps = resolve_dependencies(project.path(), b"[metadata]\nkey = \"value\"").unwrap();
         assert!(deps.is_empty());
     }
 
@@ -1138,8 +1157,7 @@ version = "0.1.0"
 
         // Initialize external as a git repo with one committed file.
         init_repo_at(&external_repo);
-        let head =
-            git_cmd(&external_repo.to_path_buf(), &["rev-parse", "HEAD"]).unwrap();
+        let head = git_cmd(&external_repo.to_path_buf(), &["rev-parse", "HEAD"]).unwrap();
 
         // Project Cargo.toml declares the external path dep.
         write_manifest(
@@ -1173,9 +1191,16 @@ source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e
 "#;
 
         let deps = resolve_dependencies(&project_dir, lockfile.as_bytes()).unwrap();
-        assert_eq!(deps.len(), 2, "demo workspace member should be excluded; got {deps:?}");
+        assert_eq!(
+            deps.len(),
+            2,
+            "demo workspace member should be excluded; got {deps:?}"
+        );
 
-        let ext = deps.iter().find(|d| d.name == "ext").expect("ext dep present");
+        let ext = deps
+            .iter()
+            .find(|d| d.name == "ext")
+            .expect("ext dep present");
         match &ext.digest {
             Digest::GitCommit { git_commit } => assert_eq!(git_commit, &head),
             _ => panic!("expected GitCommit digest for ext"),
@@ -1197,7 +1222,10 @@ source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e
             ext.uri
         );
 
-        let sev = deps.iter().find(|d| d.name == "sev").expect("sev dep present");
+        let sev = deps
+            .iter()
+            .find(|d| d.name == "sev")
+            .expect("sev dep present");
         match &sev.digest {
             Digest::GitCommit { git_commit } => {
                 assert_eq!(git_commit, "900d42d6a1f9102ed52faa3a3889b54e8a7e12c8");
@@ -1245,6 +1273,9 @@ version = "0.1.0"
             .unwrap_err()
             .to_string();
         assert!(err.contains("uncommitted changes"), "error: {err}");
-        assert!(err.contains("untracked.rs"), "error should name untracked: {err}");
+        assert!(
+            err.contains("untracked.rs"),
+            "error should name untracked: {err}"
+        );
     }
 }

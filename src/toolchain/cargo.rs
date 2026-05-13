@@ -47,7 +47,8 @@ impl ToolchainDriver for CargoInputs {
         debug!("cargo info {:?}", rustc);
         let kettle = ToolBinaryInfo::kettle_info()?;
         debug!("kettle info {:?}", rustc);
-        let resolved_deps = crate::toolchain::cargo_lock::resolve_dependencies(path, lockfile_bytes)?;
+        let resolved_deps =
+            crate::toolchain::cargo_lock::resolve_dependencies(path, lockfile_bytes)?;
         debug!("found deps {:?}", resolved_deps);
         Ok(Self {
             kettle_version: kettle.version,
@@ -148,4 +149,3 @@ impl ToolchainDriver for CargoInputs {
         }
     }
 }
-

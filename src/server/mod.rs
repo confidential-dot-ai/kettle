@@ -1,6 +1,7 @@
 pub mod api;
 pub mod event_sink;
 pub mod job;
+pub mod runner;
 
 use std::sync::Arc;
 
@@ -14,7 +15,7 @@ use crate::server::api::{AppState, JobRunner, get_events, health, post_build};
 use crate::server::job::JobRegistry;
 
 pub fn router() -> Router {
-    router_with_runner(Arc::new(NullRunner))
+    router_with_runner(runner::BuildRunner::new())
 }
 
 pub fn router_for_tests() -> Router {

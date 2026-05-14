@@ -33,7 +33,13 @@ pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSi
     let stdout_thread = thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
-            let Ok(line) = line else { break };
+            let line = match line {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::warn!("stream_command: failed to read stdout line: {e}");
+                    break;
+                }
+            };
             {
                 let mut buf = stdout_buf_c.lock().unwrap();
                 buf.extend_from_slice(line.as_bytes());
@@ -46,7 +52,13 @@ pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSi
     let stderr_thread = thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
-            let Ok(line) = line else { break };
+            let line = match line {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::warn!("stream_command: failed to read stderr line: {e}");
+                    break;
+                }
+            };
             sink_err.try_emit(crate::api::Event::Build { msg: line });
         }
     });
@@ -57,7 +69,11 @@ pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSi
     if !status.success() {
         return Err(anyhow!("child exited unsuccessfully (exit {:?})", status.code()));
     }
-    Ok(Arc::try_unwrap(stdout_buf).unwrap().into_inner().unwrap())
+    let buf = Arc::try_unwrap(stdout_buf)
+        .expect("reader threads joined; only one Arc remains")
+        .into_inner()
+        .unwrap_or_else(|e| e.into_inner());
+    Ok(buf)
 }
 
 pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(

@@ -3,4 +3,4 @@ pub mod api;
 pub mod server;
 pub mod commands;
 pub mod provenance;
-mod toolchain;
+pub mod toolchain;

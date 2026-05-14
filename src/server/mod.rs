@@ -1,4 +1,5 @@
 pub mod api;
+pub mod event_sink;
 pub mod job;
 
 use std::sync::Arc;

@@ -13,30 +13,37 @@ pub struct AttestArgs {
     pub nonce: Option<String>,
 }
 
-#[cfg(all(feature = "attest", target_os = "linux"))]
 pub async fn attest(args: AttestArgs) -> Result<()> {
+    attest_with_sink(args, &crate::toolchain::EventSink::noop()).await
+}
+
+#[cfg(all(feature = "attest", target_os = "linux"))]
+pub async fn attest_with_sink(args: AttestArgs, sink: &crate::toolchain::EventSink) -> Result<()> {
     let path = &args.path;
     let nonce = args.nonce;
     use crate::provenance::Provenance;
 
-    // Build the thing from scratch before we attest it
-    crate::commands::build::build(path)?;
+    crate::commands::build::build_with_sink(path, sink)?;
 
     let platform = attestation::detect().expect("no TEE platform detected");
     println!("Running on platform: {}", platform);
+    sink.emit(crate::api::Event::Attest {
+        msg: format!("Running on platform: {platform}"),
+    }).await;
 
     let provenance_bytes = fs_err::read(path.join("kettle-build/provenance.json"))?;
     let provenance = Provenance::from_json(&provenance_bytes)?;
     let provenance_checksum = provenance.checksum();
-    println!(
-        "Attesting build provenance.json with checksum {}",
-        hex::encode(&provenance_checksum)
-    );
-    // always put the provenance checksum in the first 32 bytes
+    println!("Attesting build provenance.json with checksum {}",
+             hex::encode(&provenance_checksum));
+    sink.emit(crate::api::Event::Attest {
+        msg: format!("Attesting provenance.json (checksum {})",
+                     hex::encode(&provenance_checksum)),
+    }).await;
+
     let mut report_data = [0u8; 48];
     report_data[..32].copy_from_slice(&provenance_checksum);
 
-    // if there is a nonce, put it in the last 16 bytes
     if let Some(nonce_string) = nonce {
         let nonce_data = hex::decode(nonce_string.replace("-", ""))?;
         if nonce_data.len() > 16 {
@@ -55,12 +62,15 @@ pub async fn attest(args: AttestArgs) -> Result<()> {
     fs_err::write(path.join("kettle-build/evidence.json"), evidence_json)?;
 
     println!("Attestation complete! Evidence written to file `evidence.json`");
+    sink.emit(crate::api::Event::Attest {
+        msg: "Attestation complete! evidence.json written".into(),
+    }).await;
 
     Ok(())
 }
 
 #[cfg(not(all(feature = "attest", target_os = "linux")))]
-pub async fn attest(_args: AttestArgs) -> Result<()> {
+pub async fn attest_with_sink(_args: AttestArgs, _sink: &crate::toolchain::EventSink) -> Result<()> {
     Err(anyhow!(
         "Attestation is disabled. Rebuild Kettle with `--features attest` to enable this command."
     ))

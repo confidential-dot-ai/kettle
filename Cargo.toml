@@ -79,6 +79,7 @@ reqwest-eventsource = { version = "0.6", optional = true }
 tower-http = { version = "0.6", features = ["fs", "trace"], optional = true }
 serde_with = { version = "3", features = ["base64"] }
 futures-util = { version = "0.3", optional = true }
+futures = "0.3"
 sysinfo = { version = "0.32", optional = true }
 
 [[bin]]

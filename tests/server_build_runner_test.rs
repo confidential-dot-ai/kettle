@@ -129,6 +129,15 @@ async fn runner_emits_build_event_during_pipeline() {
 async fn runner_streams_build_output_line_by_line() {
     use kettle::api::Event;
 
+    fn have(cmd: &str) -> bool {
+        std::process::Command::new("which").arg(cmd).output()
+            .map(|o| o.status.success()).unwrap_or(false)
+    }
+    if !have("cargo") || !have("rustc") || !have("git") {
+        eprintln!("skipping: cargo/rustc/git not available");
+        return;
+    }
+
     let tmp = tempfile::TempDir::new().expect("tempdir");
     let path = tmp.path();
     fs_err::write(path.join("Cargo.toml"),

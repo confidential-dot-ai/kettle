@@ -1,6 +1,7 @@
 use std::process::Command;
 
 #[test]
+#[ignore = "slow: runs bin/build-cloud-init (docker); run with --run-ignored"]
 fn build_cloud_init_writes_user_data() {
     // Skip gracefully if docker isn't available — bin/reproduce-build needs it.
     if std::process::Command::new("which").arg("docker").output()

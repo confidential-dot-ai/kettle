@@ -116,8 +116,16 @@ pub struct Subject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub(crate) enum Digest {
-    Sha256 { sha256: String },
-    Sha512 { sha512: String },
+    Sha256 {
+        sha256: String,
+    },
+    Sha512 {
+        sha512: String,
+    },
+    GitCommit {
+        #[serde(rename = "gitCommit")]
+        git_commit: String,
+    },
 }
 
 impl Digest {
@@ -125,6 +133,7 @@ impl Digest {
         match self {
             Self::Sha256 { sha256 } => sha256,
             Self::Sha512 { sha512 } => sha512,
+            Self::GitCommit { git_commit } => git_commit,
         }
     }
 }
@@ -994,5 +1003,39 @@ mod tests {
             String::from_utf8_lossy(regenerated.as_bytes()),
             "regenerated pnpm provenance changed!"
         );
+    }
+
+    #[test]
+    fn digest_git_commit_serializes_as_gitcommit_key() {
+        let d = Digest::GitCommit {
+            git_commit: "952489ea39cbb300828af5c1268eff3387cfe4b5".to_string(),
+        };
+        let json = serde_json::to_string(&d).unwrap();
+        assert_eq!(
+            json,
+            r#"{"gitCommit":"952489ea39cbb300828af5c1268eff3387cfe4b5"}"#
+        );
+    }
+
+    #[test]
+    fn digest_git_commit_value_returns_commit() {
+        let d = Digest::GitCommit {
+            git_commit: "abc123".to_string(),
+        };
+        assert_eq!(d.value(), "abc123");
+    }
+
+    #[test]
+    fn digest_git_commit_roundtrip() {
+        let original = Digest::GitCommit {
+            git_commit: "952489ea39cbb300828af5c1268eff3387cfe4b5".to_string(),
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let parsed: Digest = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.value(), original.value());
+        match parsed {
+            Digest::GitCommit { .. } => {}
+            _ => panic!("expected GitCommit variant after roundtrip"),
+        }
     }
 }

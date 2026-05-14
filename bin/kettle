@@ -5,14 +5,13 @@ set -euo pipefail
 export RUSTC_BOOTSTRAP=1
 
 if [[ "$(cat /sys/devices/virtual/dmi/id/chassis_asset_tag 2>/dev/null)" == "7783-7084-3265-9085-8269-3286-77" ]]; then
-  AZURE=true
-fi
-
-if [[ -n "${AZURE:-}" ]] ; then
   AZURE_SECURITY_TYPE="$(curl -s -H Metadata:true 'http://169.254.169.254/metadata/instance?api-version=2023-07-01' | jq .compute.securityProfile.securityType -r)"
+  if [[ "${AZURE_SECURITY_TYPE:-}" == "ConfidentialVM" ]]; then
+    ATTEST=true
+  fi
 fi
 
-if [[ "${AZURE_SECURITY_TYPE:-}" == "ConfidentialVM" ]]; then
+if [[ -n "${ATTEST:-}" ]]; then
   set -x
   cargo run --features attest -- "$@"
 else

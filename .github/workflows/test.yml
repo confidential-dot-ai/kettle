@@ -85,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [ ripgrep, eza, openclaw ]
+        project: [ ripgrep, eza, openclaw, kettle ]
         include:
           - project: ripgrep
             owner: burntsushi
@@ -99,6 +99,10 @@ jobs:
             owner: openclaw
             toolchain: pnpm
             ref: d518260bb8261bb179cfb421a8c166915bb59dd1
+          - project: kettle
+            owner: ${{ github.repository_owner }}
+            toolchain: rust
+            ref: ${{ github.sha }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1

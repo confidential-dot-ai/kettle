@@ -34,9 +34,9 @@ pub fn build_with_sink(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Re
 
     let toolchain = ProjectToolchain::from_dir(path)?;
     println!("Found {:?} project", toolchain);
-    futures::executor::block_on(sink.emit(crate::api::Event::Detect {
+    sink.try_emit(crate::api::Event::Detect {
         msg: format!("Detected {:?} project", toolchain),
-    }));
+    });
 
     match toolchain {
         ProjectToolchain::Cargo => crate::toolchain::cargo::build(path, sink)?,

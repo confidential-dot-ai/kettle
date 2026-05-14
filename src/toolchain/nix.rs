@@ -99,29 +99,21 @@ impl ToolchainDriver for NixInputs {
         entries
     }
 
-    fn run_build(path: &Path) -> Result<BuildOutput> {
-        let output = Command::new("nix")
-            .args([
-                "build",
-                "--no-link",
-                "--print-out-paths",
-                "--extra-experimental-features",
-                "nix-command",
-                "--extra-experimental-features",
-                "flakes",
-            ])
-            .current_dir(path)
-            .output()
-            .context("failed to spawn nix")?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "nix build failed (exit {:?})",
-                output.status.code()
-            ));
-        }
-        Ok(BuildOutput {
-            stdout: output.stdout,
-        })
+    fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput> {
+        let mut cmd = Command::new("nix");
+        cmd.args([
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            "--extra-experimental-features",
+            "nix-command",
+            "--extra-experimental-features",
+            "flakes",
+        ])
+        .current_dir(path);
+        let stdout = crate::toolchain::runner::stream_command(&mut cmd, sink)
+            .map_err(|e| anyhow!("nix build failed: {}", e))?;
+        Ok(BuildOutput { stdout })
     }
 
     fn collect_artifacts(

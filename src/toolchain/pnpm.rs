@@ -77,34 +77,20 @@ impl ToolchainDriver for PnpmInputs {
         entries
     }
 
-    fn run_build(path: &Path) -> Result<BuildOutput> {
-        let install = Command::new("pnpm")
+    fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput> {
+        let mut install_cmd = Command::new("pnpm");
+        install_cmd
             .args(["install", "--frozen-lockfile"])
-            .current_dir(path)
-            .output()
-            .context("failed to spawn pnpm install")?;
-        if !install.status.success() {
-            return Err(anyhow!(
-                "pnpm install --frozen-lockfile failed (exit {:?})",
-                install.status.code()
-            ));
-        }
+            .current_dir(path);
+        let _ = crate::toolchain::runner::stream_command(&mut install_cmd, sink)
+            .map_err(|e| anyhow!("pnpm install --frozen-lockfile failed: {}", e))?;
 
-        let build = Command::new("pnpm")
-            .arg("build")
-            .current_dir(path)
-            .output()
-            .context("failed to spawn pnpm build")?;
-        if !build.status.success() {
-            return Err(anyhow!(
-                "pnpm build failed (exit {:?})",
-                build.status.code()
-            ));
-        }
+        let mut build_cmd = Command::new("pnpm");
+        build_cmd.arg("build").current_dir(path);
+        let stdout = crate::toolchain::runner::stream_command(&mut build_cmd, sink)
+            .map_err(|e| anyhow!("pnpm build failed: {}", e))?;
 
-        Ok(BuildOutput {
-            stdout: build.stdout,
-        })
+        Ok(BuildOutput { stdout })
     }
 
     fn collect_artifacts(

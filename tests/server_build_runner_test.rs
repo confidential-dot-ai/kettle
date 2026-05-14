@@ -125,6 +125,61 @@ async fn runner_emits_build_event_during_pipeline() {
     );
 }
 
+#[tokio::test]
+async fn runner_streams_build_output_line_by_line() {
+    use kettle::api::Event;
+
+    let tmp = tempfile::TempDir::new().expect("tempdir");
+    let path = tmp.path();
+    fs_err::write(path.join("Cargo.toml"),
+        b"[package]\nname = \"t\"\nversion = \"0.0.1\"\nedition = \"2024\"\n").unwrap();
+    fs_err::write(path.join("Cargo.lock"), b"# auto\nversion = 4\n").unwrap();
+    fs_err::create_dir_all(path.join("src")).unwrap();
+    fs_err::write(path.join("src/main.rs"), b"fn main() { println!(\"hi\"); }").unwrap();
+    let _ = std::process::Command::new("git").arg("init").arg(path).output();
+    let _ = std::process::Command::new("git").arg("-C").arg(path).arg("add").arg(".").output();
+    let _ = std::process::Command::new("git")
+        .arg("-C").arg(path)
+        .args(["-c","user.name=t","-c","user.email=t@t","commit","-m","x"])
+        .output();
+
+    // Tarball it.
+    let mut tar_gz = Vec::new();
+    {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        let enc = GzEncoder::new(&mut tar_gz, Compression::fast());
+        let mut builder = tar::Builder::new(enc);
+        builder.append_dir_all("proj", path).unwrap();
+        builder.into_inner().unwrap().finish().unwrap();
+    }
+
+    let registry = JobRegistry::new();
+    let runner = BuildRunner::new();
+    let req = BuildRequest {
+        nonce: "00".into(),
+        repo_url: None, repo_ref: None,
+        source_data: Some(tar_gz),
+    };
+    let id = registry.try_register_with_nonce(req.nonce.clone()).unwrap();
+    runner.spawn(registry.clone(), id.clone(), req);
+
+    let job = registry.get(&id).unwrap();
+    for _ in 0..1200 {
+        if job.is_terminal().await { break; }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let events = job.snapshot_events().await;
+    let build_events: Vec<_> = events.iter()
+        .filter(|e| matches!(e, Event::Build { .. }))
+        .collect();
+    assert!(
+        build_events.len() > 2,
+        "expected more than 2 Build events (start, end, and >=1 streamed line), got {}: {:?}",
+        build_events.len(), build_events
+    );
+}
+
 fn make_empty_dir_targz() -> Vec<u8> {
     use flate2::{Compression, write::GzEncoder};
     let mut gz = GzEncoder::new(Vec::new(), Compression::fast());

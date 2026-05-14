@@ -207,7 +207,7 @@ pub(crate) trait ToolchainDriver: Sized {
     fn merkle_entries(&self, git: &GitContext, lockfile_hash: &str) -> Vec<String>;
 
     /// Run the build subprocess.
-    fn run_build(path: &Path) -> Result<BuildOutput>;
+    fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput>;
 
     /// Collect and stage artifacts into `artifacts_dir`.
     /// Returns Vec<Artifact> with `path` fields pointing into `artifacts_dir`.

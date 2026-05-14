@@ -1,7 +1,11 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context as _, Result, anyhow};
 use rs_merkle::MerkleTree;
 use sha2::{Digest as _, Sha256};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use tracing::debug;
 
 use crate::provenance::{
@@ -10,6 +14,51 @@ use crate::provenance::{
 };
 
 use super::driver::{Artifact, BuildMetadata, GitContext, ProvenanceFields, ToolchainDriver};
+
+/// Spawn `cmd`, pipe its stdout/stderr through `BufReader::lines`, and emit each
+/// line as `Event::Build` on `sink`. Returns the captured stdout bytes (each
+/// line as emitted, joined with '\n'). Stderr is emitted but not captured.
+///
+/// Fails if the child does not exit successfully.
+pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSink) -> Result<Vec<u8>> {
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.spawn().context("failed to spawn child")?;
+    let stdout = child.stdout.take().expect("piped");
+    let stderr = child.stderr.take().expect("piped");
+
+    let stdout_buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+
+    let sink_out = sink.clone();
+    let stdout_buf_c = stdout_buf.clone();
+    let stdout_thread = thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            let Ok(line) = line else { break };
+            {
+                let mut buf = stdout_buf_c.lock().unwrap();
+                buf.extend_from_slice(line.as_bytes());
+                buf.push(b'\n');
+            }
+            sink_out.try_emit(crate::api::Event::Build { msg: line });
+        }
+    });
+    let sink_err = sink.clone();
+    let stderr_thread = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            let Ok(line) = line else { break };
+            sink_err.try_emit(crate::api::Event::Build { msg: line });
+        }
+    });
+
+    let status = child.wait().context("waiting for child")?;
+    stdout_thread.join().ok();
+    stderr_thread.join().ok();
+    if !status.success() {
+        return Err(anyhow!("child exited unsuccessfully (exit {:?})", status.code()));
+    }
+    Ok(Arc::try_unwrap(stdout_buf).unwrap().into_inner().unwrap())
+}
 
 pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(
     path: &PathBuf,
@@ -45,13 +94,13 @@ pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(
     // 6. Run build
     let cmd_display = T::build_command_display();
     println!("Running `{}`", cmd_display);
-    futures::executor::block_on(sink.emit(crate::api::Event::Build {
+    sink.try_emit(crate::api::Event::Build {
         msg: format!("Running `{}`", cmd_display),
-    }));
-    let build_output = T::run_build(path)?;
-    futures::executor::block_on(sink.emit(crate::api::Event::Build {
+    });
+    let build_output = T::run_build(path, sink)?;
+    sink.try_emit(crate::api::Event::Build {
         msg: "Build command finished".into(),
-    }));
+    });
 
     // 7. Collect artifacts (each impl stages into artifacts_dir itself)
     let artifacts_dir = output_dir.join("artifacts");
@@ -71,9 +120,9 @@ pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(
         output_dir.join("provenance.json"),
         serde_json::to_string_pretty(&provenance)?,
     )?;
-    futures::executor::block_on(sink.emit(crate::api::Event::Provenance {
+    sink.try_emit(crate::api::Event::Provenance {
         msg: "Wrote provenance.json".into(),
-    }));
+    });
 
     println!(
         "Build in {:?} complete, output located in `kettle-build`",

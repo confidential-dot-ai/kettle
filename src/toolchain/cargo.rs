@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::debug;
@@ -77,21 +77,12 @@ impl ToolchainDriver for CargoInputs {
         entries
     }
 
-    fn run_build(path: &Path) -> Result<BuildOutput> {
-        let output = Command::new("cargo")
-            .args(["build", "--locked", "--release"])
-            .current_dir(path)
-            .output()
-            .context("failed to spawn cargo")?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "cargo build failed (exit {:?})",
-                output.status.code()
-            ));
-        }
-        Ok(BuildOutput {
-            stdout: output.stdout,
-        })
+    fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput> {
+        let mut cmd = Command::new("cargo");
+        cmd.args(["build", "--locked", "--release"]).current_dir(path);
+        let stdout = crate::toolchain::runner::stream_command(&mut cmd, sink)
+            .map_err(|e| anyhow!("cargo build failed: {}", e))?;
+        Ok(BuildOutput { stdout })
     }
 
     fn collect_artifacts(

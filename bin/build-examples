@@ -1,6 +1,0 @@
-#!/bin/bash
-
-cargo nextest run --run-ignored only --features attest
-
-tar cfvz target/ripgrep-build.tar.gz -C /tmp ripgrep-build
-tar cfvz target/alejandra-build.tar.gz -C /tmp alejandra-build

@@ -2,12 +2,9 @@
 set -euo pipefail
 
 export SOURCE_DATE_EPOCH
-
-set -x
-
-
 mkdir -p target/reproducible
 
+set -x
 SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct)"
 docker build . -t kettle-reproducible \
   --platform linux/amd64 \

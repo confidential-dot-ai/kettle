@@ -19,7 +19,10 @@ use super::driver::{Artifact, BuildMetadata, GitContext, ProvenanceFields, Toolc
 /// line as `Event::Build` on `sink`. Returns the captured stdout bytes (each
 /// line as emitted, joined with '\n'). Stderr is emitted but not captured.
 ///
-/// Fails if the child does not exit successfully.
+/// Fails if the child does not exit successfully OR if reading either pipe
+/// errors mid-stream. The latter is required because callers (notably nix)
+/// parse stdout for artifact discovery — silently truncating it would
+/// produce incorrect provenance.
 pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSink) -> Result<Vec<u8>> {
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().context("failed to spawn child")?;
@@ -30,16 +33,10 @@ pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSi
 
     let sink_out = sink.clone();
     let stdout_buf_c = stdout_buf.clone();
-    let stdout_thread = thread::spawn(move || {
+    let stdout_thread = thread::spawn(move || -> std::io::Result<()> {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
-            let line = match line {
-                Ok(l) => l,
-                Err(e) => {
-                    tracing::warn!("stream_command: failed to read stdout line: {e}");
-                    break;
-                }
-            };
+            let line = line?;
             {
                 let mut buf = stdout_buf_c.lock().unwrap();
                 buf.extend_from_slice(line.as_bytes());
@@ -47,25 +44,25 @@ pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSi
             }
             sink_out.try_emit(crate::api::Event::Build { msg: line });
         }
+        Ok(())
     });
     let sink_err = sink.clone();
-    let stderr_thread = thread::spawn(move || {
+    let stderr_thread = thread::spawn(move || -> std::io::Result<()> {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
-            let line = match line {
-                Ok(l) => l,
-                Err(e) => {
-                    tracing::warn!("stream_command: failed to read stderr line: {e}");
-                    break;
-                }
-            };
+            let line = line?;
             sink_err.try_emit(crate::api::Event::Build { msg: line });
         }
+        Ok(())
     });
 
     let status = child.wait().context("waiting for child")?;
-    stdout_thread.join().ok();
-    stderr_thread.join().ok();
+    let stdout_result = stdout_thread.join()
+        .map_err(|_| anyhow!("stdout reader thread panicked"))?;
+    let stderr_result = stderr_thread.join()
+        .map_err(|_| anyhow!("stderr reader thread panicked"))?;
+    stdout_result.context("reading child stdout")?;
+    stderr_result.context("reading child stderr")?;
     if !status.success() {
         return Err(anyhow!("child exited unsuccessfully (exit {:?})", status.code()));
     }

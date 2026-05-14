@@ -5,13 +5,13 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 # 1. Reproducibly build the release binaries.
-bin/reproduce-build
+bin/build-reproducible
 
 BIN="$REPO_ROOT/target/reproducible/kettle-server"
 OUT="$REPO_ROOT/target/reproducible/server-user-data.yml"
 
 if [[ ! -f "$BIN" ]]; then
-  echo "expected $BIN to exist after bin/reproduce-build" >&2
+  echo "expected $BIN to exist after bin/build-reproducible" >&2
   exit 1
 fi
 

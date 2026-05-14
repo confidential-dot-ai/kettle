@@ -39,9 +39,9 @@ pub fn build_with_sink(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Re
     }));
 
     match toolchain {
-        ProjectToolchain::Cargo => crate::toolchain::cargo::build(path)?,
-        ProjectToolchain::Nix => crate::toolchain::nix::build(path)?,
-        ProjectToolchain::Pnpm => crate::toolchain::pnpm::build(path)?,
+        ProjectToolchain::Cargo => crate::toolchain::cargo::build(path, sink)?,
+        ProjectToolchain::Nix => crate::toolchain::nix::build(path, sink)?,
+        ProjectToolchain::Pnpm => crate::toolchain::pnpm::build(path, sink)?,
     }
     Ok(())
 }

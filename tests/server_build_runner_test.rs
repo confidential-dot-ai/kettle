@@ -1,9 +1,9 @@
 #![cfg(feature = "server")]
 
-use kettle::api::{BuildRequest, Event, BuildResult};
-use kettle::server::runner::BuildRunner;
-use kettle::server::job::JobRegistry;
+use kettle::api::{BuildRequest, BuildResult, Event};
 use kettle::server::api::JobRunner;
+use kettle::server::job::JobRegistry;
+use kettle::server::runner::BuildRunner;
 
 #[tokio::test]
 async fn runner_emits_complete_failed_on_empty_dir_project() {
@@ -34,6 +34,94 @@ async fn runner_emits_complete_failed_on_empty_dir_project() {
     assert!(
         matches!(last, Event::Complete { result: BuildResult::Failed { .. } }),
         "expected failure complete event, got {last:?}"
+    );
+}
+
+#[tokio::test]
+async fn runner_emits_build_event_during_pipeline() {
+    // Build a minimal cargo project on disk (with .git), tarball it, submit it.
+    // The cargo build itself will fail (no src/), but the runner should still
+    // emit Event::Build before reaching T::run_build.
+    fn have(cmd: &str) -> bool {
+        std::process::Command::new(cmd)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    if !have("cargo") || !have("rustc") || !have("git") {
+        eprintln!("skipping: cargo/rustc/git not available");
+        return;
+    }
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let project = tmp.path().join("proj");
+    fs_err::create_dir_all(&project).unwrap();
+    fs_err::write(
+        project.join("Cargo.lock"),
+        "# auto-generated\nversion = 4\n",
+    )
+    .unwrap();
+    fs_err::write(
+        project.join("Cargo.toml"),
+        "[package]\nname = \"x\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+
+    fn git(dir: &std::path::Path, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .expect("git");
+        assert!(
+            out.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    git(&project, &["init", "-q"]);
+    git(&project, &["config", "user.email", "t@example.com"]);
+    git(&project, &["config", "user.name", "test"]);
+    git(&project, &["add", "-A"]);
+    git(&project, &["commit", "-q", "-m", "init"]);
+
+    let mut tar_gz = Vec::new();
+    {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        let enc = GzEncoder::new(&mut tar_gz, Compression::fast());
+        let mut builder = tar::Builder::new(enc);
+        builder.append_dir_all("proj", &project).unwrap();
+        builder.into_inner().unwrap().finish().unwrap();
+    }
+
+    let registry = JobRegistry::new();
+    let runner = BuildRunner::new();
+
+    let req = BuildRequest {
+        nonce: "00".into(),
+        repo_url: None,
+        repo_ref: None,
+        source_data: Some(tar_gz),
+    };
+    let id = registry
+        .try_register_with_nonce(req.nonce.clone())
+        .unwrap();
+    runner.spawn(registry.clone(), id.clone(), req);
+
+    let job = registry.get(&id).unwrap();
+    for _ in 0..600 {
+        if job.is_terminal().await {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let events = job.snapshot_events().await;
+    assert!(
+        events.iter().any(|e| matches!(e, Event::Build { .. })),
+        "expected at least one Build event, got {events:?}"
     );
 }
 

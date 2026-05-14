@@ -11,8 +11,8 @@ use crate::{
     },
 };
 
-pub(crate) fn build(path: &PathBuf) -> Result<()> {
-    crate::toolchain::runner::run::<PnpmInputs>(path)
+pub(crate) fn build(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Result<()> {
+    crate::toolchain::runner::run::<PnpmInputs>(path, sink)
 }
 
 #[derive(Debug)]

@@ -11,7 +11,10 @@ use crate::provenance::{
 
 use super::driver::{Artifact, BuildMetadata, GitContext, ProvenanceFields, ToolchainDriver};
 
-pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(path: &PathBuf) -> Result<()> {
+pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(
+    path: &PathBuf,
+    sink: &crate::toolchain::EventSink,
+) -> Result<()> {
     debug!("input dir: {:?}", path);
 
     // 1. Clean / create output dir
@@ -40,8 +43,15 @@ pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(path: &PathBuf) -> Resul
     debug!("build metadata: {:?}", build_metadata);
 
     // 6. Run build
-    println!("Running `{}`", T::build_command_display());
+    let cmd_display = T::build_command_display();
+    println!("Running `{}`", cmd_display);
+    futures::executor::block_on(sink.emit(crate::api::Event::Build {
+        msg: format!("Running `{}`", cmd_display),
+    }));
     let build_output = T::run_build(path)?;
+    futures::executor::block_on(sink.emit(crate::api::Event::Build {
+        msg: "Build command finished".into(),
+    }));
 
     // 7. Collect artifacts (each impl stages into artifacts_dir itself)
     let artifacts_dir = output_dir.join("artifacts");
@@ -61,6 +71,9 @@ pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(path: &PathBuf) -> Resul
         output_dir.join("provenance.json"),
         serde_json::to_string_pretty(&provenance)?,
     )?;
+    futures::executor::block_on(sink.emit(crate::api::Event::Provenance {
+        msg: "Wrote provenance.json".into(),
+    }));
 
     println!(
         "Build in {:?} complete, output located in `kettle-build`",

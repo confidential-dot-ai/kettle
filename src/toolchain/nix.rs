@@ -32,8 +32,8 @@ struct FetchEntry {
     urls: Option<String>,
 }
 
-pub(crate) fn build(path: &PathBuf) -> Result<()> {
-    crate::toolchain::runner::run::<NixInputs>(path)
+pub(crate) fn build(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Result<()> {
+    crate::toolchain::runner::run::<NixInputs>(path, sink)
 }
 
 #[derive(Debug)]

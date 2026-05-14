@@ -51,42 +51,52 @@ async fn run_build(job: Arc<ServerJob>, req: BuildRequest) -> Result<()> {
         }
     });
 
-    let project_dir = materialize_source(&req, &work_dir_path).await?;
-    let nonce = req.nonce.clone();
+    // Inner async block so cleanup (drop(sink) + fwd.await) always runs,
+    // whether the build succeeds or fails.
+    let build_result: Result<()> = async {
+        let project_dir = materialize_source(&req, &work_dir_path).await?;
+        let nonce = req.nonce.clone();
 
-    let sink_clone = sink.clone();
-    let project_dir_clone = project_dir.clone();
-    let _: () = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-        #[cfg(feature = "attest")]
-        {
-            let args = crate::commands::attest::AttestArgs {
-                path: project_dir_clone,
-                nonce: Some(nonce),
-            };
-            futures::executor::block_on(
-                crate::commands::attest::attest_with_sink(args, &sink_clone)
-            )?;
-        }
-        #[cfg(not(feature = "attest"))]
-        {
-            let _ = nonce; // explicitly drop unused
-            crate::commands::build::build_with_sink(&project_dir_clone, &sink_clone)?;
-        }
+        let sink_clone = sink.clone();
+        let project_dir_clone = project_dir.clone();
+        tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            #[cfg(feature = "attest")]
+            {
+                let args = crate::commands::attest::AttestArgs {
+                    path: project_dir_clone,
+                    nonce: Some(nonce),
+                };
+                futures::executor::block_on(
+                    crate::commands::attest::attest_with_sink(args, &sink_clone)
+                )?;
+            }
+            #[cfg(not(feature = "attest"))]
+            {
+                let _ = nonce; // explicitly drop unused
+                crate::commands::build::build_with_sink(&project_dir_clone, &sink_clone)?;
+            }
+            Ok(())
+        }).await??;
+
+        // Build success — produce tarball.
+        let kettle_build = project_dir.join("kettle-build");
+        anyhow::ensure!(kettle_build.is_dir(), "build did not produce kettle-build/");
+        let tarball = tar_dir(&kettle_build)?;
+        job.result.set(tarball).map_err(|_| anyhow::anyhow!("result already set"))?;
         Ok(())
-    }).await??;
+    }.await;
 
+    // ALWAYS drain the forwarder before returning so the outer spawn closure's
+    // final Complete event is emitted strictly AFTER all build events.
     drop(sink); // close sender → forwarding task exits
     let _ = fwd.await;
+    drop(work_dir);
 
-    let kettle_build = project_dir.join("kettle-build");
-    let tarball = tar_dir(&kettle_build)?;
-    job.result.set(tarball).map_err(|_| anyhow::anyhow!("result already set"))?;
+    build_result?; // propagate any error to the outer spawn closure
 
+    // Success: emit Complete{Ok} + mark_done AFTER forwarder has drained.
     job.push_event(Event::Complete { result: BuildResult::Ok }).await;
     job.mark_done().await;
-
-    // keep work_dir alive until here
-    drop(work_dir);
     Ok(())
 }
 

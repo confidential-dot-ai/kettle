@@ -13,5 +13,11 @@ async fn main() {
         .expect("failed to bind");
 
     eprintln!("kettle-server listening on 0.0.0.0:{port}");
+
+    #[cfg(not(feature = "attest"))]
+    eprintln!("attestation DISABLED");
+    #[cfg(feature = "attest")]
+    eprintln!("attestation ENABLED");
+
     axum::serve(listener, app).await.expect("server error");
 }

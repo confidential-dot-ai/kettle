@@ -7,7 +7,7 @@ build = "build.rs"
 
 [features]
 attest = ["attestation/attest"]
-server = ["dep:axum", "dep:tar", "dep:zip", "dep:dashmap", "dep:tempfile", "dep:tokio-stream", "dep:futures-util"]
+server = ["dep:axum", "dep:tar", "dep:zip", "dep:dashmap", "dep:tempfile", "dep:tokio-stream", "dep:futures-util", "dep:tokio-util"]
 
 [dependencies]
 anyhow = "1.0.101"
@@ -60,7 +60,7 @@ x509-cert = { version = "0.2.5", features = ["std"] }
 uuid = { version = "1.21.0", features = ["v4"] }
 rs_merkle = "1.5.0"
 attestation = { git = "https://github.com/lunal-dev/attestation-rs", branch = "usize", version = "0.4.0" }
-tokio = { version = "1.49.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "fs"] }
 tracing = "0.1.44"
 clap-verbosity-flag = { version = "3.0.4", default-features = false, features = [
     "tracing",
@@ -80,6 +80,7 @@ tower-http = { version = "0.6", features = ["fs", "trace"], optional = true }
 serde_with = { version = "3", features = ["base64"] }
 futures-util = { version = "0.3", optional = true }
 futures = "0.3"
+tokio-util = { version = "0.7", features = ["io"], optional = true }
 sysinfo = { version = "0.32", optional = true }
 
 [[bin]]

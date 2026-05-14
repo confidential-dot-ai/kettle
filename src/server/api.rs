@@ -83,3 +83,19 @@ pub async fn get_events(
 fn to_sse(event: crate::api::Event) -> SseEvent {
     SseEvent::default().data(serde_json::to_string(&event).unwrap())
 }
+
+pub async fn get_result(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<axum::response::Response, StatusCode> {
+    let job = state.registry.get(&id).ok_or(StatusCode::NOT_FOUND)?;
+    let path = job.result.get().ok_or(StatusCode::NOT_FOUND)?;
+    let file = tokio::fs::File::open(path)
+        .await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let stream = tokio_util::io::ReaderStream::new(file);
+    Ok(axum::response::Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/gzip")
+        .body(axum::body::Body::from_stream(stream))
+        .unwrap())
+}

@@ -44,7 +44,10 @@ Kettle is available from GitHub Releases or from source via Cargo, the Rust buil
 ### From GitHub Releases
 
 ```bash
-curl -LO https://github.com/lunal-dev/kettle/releases/latest/download/kettle
+curl -LO https://github.com/lunal-dev/kettle/releases/latest/download/kettle-installer.sh
+# don't forget to read the source before you run random scripts from the internet :)
+chmod +x kettle-installer.sh
+./kettle-installer.sh
 ```
 
 ### From source

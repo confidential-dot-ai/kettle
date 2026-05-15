@@ -14,3 +14,11 @@ docker build . -t kettle-reproducible \
   --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
   --target=artifact \
   --output "type=local,dest=$(pwd)/target/reproducible/"
+
+# Package the binary for dist to release
+(
+    cd target/reproducible
+    tar cfvj kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz kettle
+    sha256sum -b kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz > \
+      kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz.sha256
+)

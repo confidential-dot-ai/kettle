@@ -46,8 +46,7 @@ Kettle is available from GitHub Releases or from source via Cargo, the Rust buil
 ```bash
 curl -LO https://github.com/lunal-dev/kettle/releases/latest/download/kettle-installer.sh
 # don't forget to read the source before you run random scripts from the internet :)
-chmod +x kettle-installer.sh
-./kettle-installer.sh
+bash kettle-installer.sh
 ```
 
 ### From source
@@ -63,6 +62,17 @@ If you are running inside a TEE, you will need to install OS packages for attest
 ```bash
 apt-get install -y libtss2-dev
 cargo install --features attest --git https://github.com/lunal-dev/kettle
+```
+
+### Reproducible build
+
+Every release of Kettle includes a full reproducible binary, with support for attestation, built inside a fully reproducible environment in Docker. Download and use the fully reproducible binary by running:
+
+```bash
+curl -LO https://github.com/lunal-dev/kettle/releases/latest/download/kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz
+tar xfvj kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz 
+chmod +x kettle
+./kettle attest
 ```
 
 ## Using Kettle
@@ -129,3 +139,5 @@ Planned toolchain support includes:
 Use `cargo nextest run` to run the tests for any platform.
 
 In a TEE, use `cargo nextest run --ignored all` to run the full integration tests that checkout Rust and Nix projects, build them, attest them, and verify them.
+
+Run `bin/build-reproducible` to use Docker images provided by the StageX project to build a byte-for-byte reproducible build of Kettle into `./target/reproducible/kettle`.

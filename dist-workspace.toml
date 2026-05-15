@@ -15,8 +15,17 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
+# Whether to publish GitHub attestations for builds
+github-attestations = true
 
 [dist.github-action-commits]
 "actions/checkout" = "de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2"
 "actions/upload-artifact" = "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"
 "actions/download-artifact" = "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
+
+[[dist.extra-artifacts]]
+artifacts = [
+    "target/reproducible/kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz",
+    "target/reproducible/kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz.sha256"
+]
+build = ["bin/reproduce-build"]

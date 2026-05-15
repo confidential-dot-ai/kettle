@@ -7,13 +7,13 @@ if [[ $# -ne 2 ]]; then
     echo "  REPO_URL  git URL to clone (e.g. https://github.com/user/proj)" >&2
     echo "  REPO_REF  branch, tag, or commit to check out" >&2
     echo "" >&2
-    echo "  ORCHESTRATOR_URL  orchestrator base URL (default: http://127.0.0.1:18080)" >&2
+    echo "  ORCHESTRATOR_URL  orchestrator base URL (default: http://127.0.0.1:8000)" >&2
     exit 2
 fi
 
 REPO_URL="$1"
 REPO_REF="$2"
-ORCH="${ORCHESTRATOR_URL:-http://127.0.0.1:18080}"
+ORCH="${ORCHESTRATOR_URL:-http://127.0.0.1:8000}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

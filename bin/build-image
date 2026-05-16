@@ -1,0 +1,83 @@
+#!/bin/bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+FORCE=0
+for arg in "$@"; do
+  case "$arg" in
+    -f|--force) FORCE=1 ;;
+    *)
+      echo "unknown argument: $arg" >&2
+      echo "usage: $(basename "$0") [-f|--force]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+BIN="$REPO_ROOT/target/reproducible/kettle-server"
+
+if [[ ! -f "$BIN" || $FORCE -eq 1 ]]; then
+  bin/build-reproducible
+fi
+
+if [[ ! -f "$BIN" ]]; then
+  echo "expected $BIN to exist after bin/build-reproducible" >&2
+  exit 1
+fi
+
+rm -rf "$REPO_ROOT/target/steep"
+mkdir -p "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
+cp "$BIN" "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
+
+OUT="$REPO_ROOT/target/steep/user-data.yml"
+
+read -r -d '' UNIT <<'EOF' || true
+[Unit]
+Description=Kettle build server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/kettle-server
+Restart=no
+User=kettle
+Group=kettle
+DynamicUser=yes
+NoNewPrivileges=yes
+CacheDirectory=kettle-server
+Environment=CARGO_HOME=/var/cache/kettle-server/cargo
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+{
+  echo "#cloud-config"
+  echo "write_files:"
+  echo "  - path: /etc/systemd/system/kettle-server.service"
+  echo "    permissions: '0644'"
+  echo "    owner: root:root"
+  echo "    content: |"
+  while IFS= read -r line; do
+    echo "      $line"
+  done <<< "$UNIT"
+  echo "runcmd:"
+  echo "  - systemctl enable --now kettle-server.service"
+} > "$OUT"
+
+(
+    cd ../steep
+    bin/steep build "$REPO_ROOT/target/image" \
+      -e ../kettle/target/steep/mkosi.extra \
+      -c ../kettle/target/steep/user-data.yml \
+      -p git,curl,ca-certificates,build-essential,cargo \
+      --console
+)
+
+echo "./target/steep contains a reproducible build of kettle-server and cloud-init user-data."
+echo "./target/image contains an image, including IGVM measurements, to run attested builds in CVMs."
+echo
+echo "To use the image, run:"
+echo "  bin/kettle-orchestrator target/image"

@@ -138,16 +138,14 @@ impl ToolBinaryInfo {
             .with_context(|| format!("{cmd} not found"))?;
         let version = String::from_utf8(ver.stdout)?.trim().to_string();
 
-        let mut which = Command::new("rustup")
-            .args(["which", cmd])
-            .output()
-            .with_context(|| format!("rustup which {cmd} failed"))?;
-        if which.stdout.is_empty() {
-            which = Command::new("which")
+        let rustup = Command::new("rustup").args(["which", cmd]).output().ok();
+        let which = match rustup {
+            Some(out) if !out.stdout.is_empty() => out,
+            _ => Command::new("which")
                 .arg(cmd)
                 .output()
-                .with_context(|| format!("which {cmd} failed"))?;
-        }
+                .with_context(|| format!("which {cmd} failed"))?,
+        };
         let bin = PathBuf::from(String::from_utf8(which.stdout)?.trim().to_string());
         let sha256 = hex::encode(Sha256::digest(fs_err::read(&bin)?));
         Ok(Self { version, sha256 })

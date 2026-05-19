@@ -27,7 +27,9 @@ if [[ ! -f "$BIN" ]]; then
   exit 1
 fi
 
-rm -rf "$REPO_ROOT/target/steep"
+if [[ $FORCE -eq 1 ]]; then
+  rm -rf "$REPO_ROOT/target/steep"
+fi
 mkdir -p "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
 cp "$BIN" "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
 

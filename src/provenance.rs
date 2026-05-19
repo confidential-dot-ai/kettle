@@ -22,11 +22,11 @@ impl Provenance {
     }
 
     pub fn to_json(&self) -> String {
-        serde_json::to_string(&self).expect("could not generate JSON")
+        serde_json::to_string_pretty(&self).expect("could not generate JSON")
     }
 
     pub fn checksum(&self) -> Vec<u8> {
-        Sha256::digest(self.to_json().trim_end()).to_vec()
+        Sha256::digest(self.to_json()).to_vec()
     }
 
     pub fn toolchain(&self) -> &Toolchain {

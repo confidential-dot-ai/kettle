@@ -13,8 +13,8 @@ fi
 
 if [[ -n "${ATTEST:-}" ]]; then
   set -x
-  cargo run --features attest -- "$@"
+  cargo run --features attest --bin kettle -- "$@"
 else
   set -x
-  cargo run -- "$@"
+  cargo run --bin kettle -- "$@"
 fi

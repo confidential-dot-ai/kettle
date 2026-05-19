@@ -997,7 +997,6 @@ mod tests {
     fn key_ordering_matches_when_regenerated_pnpm() {
         let p = Provenance::from_json(PNPM_FIXTURE).unwrap();
         let regenerated = serde_json::to_string_pretty(&p).unwrap();
-        let _ = fs_err::write("regenerated.json", &regenerated);
         assert_eq!(
             String::from_utf8_lossy(PNPM_FIXTURE),
             String::from_utf8_lossy(regenerated.as_bytes()),

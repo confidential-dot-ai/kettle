@@ -87,6 +87,7 @@ EOF
 (
     cd ../steep
     bin/steep build "$REPO_ROOT/target/image" \
+      --smp 10 --memory 20G \
       -e ../kettle/target/steep/mkosi.extra \
       -c ../kettle/target/steep/user-data.yml \
       -p git,curl,ca-certificates,build-essential,cargo,tpm2-tss \

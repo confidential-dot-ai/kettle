@@ -50,6 +50,7 @@ DynamicUser=yes
 NoNewPrivileges=yes
 CacheDirectory=kettle-server
 Environment=CARGO_HOME=/var/cache/kettle-server/cargo
+SupplementaryGroups=sev-guest
 
 [Install]
 WantedBy=multi-user.target
@@ -57,6 +58,11 @@ EOF
 
 {
   echo "#cloud-config"
+  # The kettle-server runs as a DynamicUser, so it can't own /dev/sev-guest
+  # directly. Instead, create a static group, grant it the device via a udev
+  # rule, and add the service's dynamic user to that group.
+  echo "groups:"
+  echo "  - sev-guest"
   echo "write_files:"
   echo "  - path: /etc/systemd/system/kettle-server.service"
   echo "    permissions: '0644'"
@@ -65,7 +71,16 @@ EOF
   while IFS= read -r line; do
     echo "      $line"
   done <<< "$UNIT"
+  echo "  - path: /etc/udev/rules.d/99-sev-guest.rules"
+  echo "    permissions: '0644'"
+  echo "    owner: root:root"
+  echo "    content: |"
+  echo "      KERNEL==\"sev-guest\", GROUP=\"sev-guest\", MODE=\"0660\""
   echo "runcmd:"
+  # The kernel creates /dev/sev-guest at boot, before the rule above lands;
+  # reload and re-trigger so the rule applies before the server starts.
+  echo "  - udevadm control --reload-rules"
+  echo "  - udevadm trigger --name-match=/dev/sev-guest"
   echo "  - systemctl enable --now kettle-server.service"
 } > "$OUT"
 
@@ -74,7 +89,7 @@ EOF
     bin/steep build "$REPO_ROOT/target/image" \
       -e ../kettle/target/steep/mkosi.extra \
       -c ../kettle/target/steep/user-data.yml \
-      -p git,curl,ca-certificates,build-essential,cargo \
+      -p git,curl,ca-certificates,build-essential,cargo,tpm2-tss \
       --console
 )
 

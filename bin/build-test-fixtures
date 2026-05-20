@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+
+(
+    set -x
+    test -d ~/ripgrep || git clone https://github.com/burntsushi/ripgrep ~/ripgrep
+    bin/kettle attest ~/ripgrep
+    rm -rf tests/fixtures/ripgrep
+    cp -r ~/ripgrep/kettle-build tests/fixtures/ripgrep
+)
+
+(
+    set -x
+    test -d ~/alejandra || git clone https://github.com/kamadorueda/alejandra ~/alejandra
+    bin/kettle attest ~/alejandra
+    rm -rf tests/fixtures/alejandra
+    cp -r ~/alejandra/kettle-build tests/fixtures/alejandra
+)
+
+(
+    set -x
+    test -d ~/kex || (
+        cd ~
+        cargo new kex
+        cd kex
+        git add .
+        git commit -m "Initial commit"
+    )
+    bin/kettle attest ~/kex
+    rm -rf tests/fixtures/kex
+    cp -r ~/kex/kettle-build tests/fixtures/kex
+)

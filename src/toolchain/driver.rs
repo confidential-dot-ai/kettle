@@ -175,8 +175,9 @@ impl ToolBinaryInfo {
     }
 
     pub(crate) fn kettle_info() -> Result<Self> {
-        let version = binary::VERSION.to_string();
-        let sha256 = binary::VERSION.to_string();
+        let version = binary::PKG_VERSION.to_string();
+        let bin = std::env::current_exe().context("locating current kettle binary")?;
+        let sha256 = hex::encode(Sha256::digest(fs_err::read(&bin)?));
         Ok(Self { version, sha256 })
     }
 }

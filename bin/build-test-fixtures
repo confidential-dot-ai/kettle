@@ -7,6 +7,7 @@ set -euo pipefail
     bin/kettle attest ~/ripgrep
     rm -rf tests/fixtures/ripgrep
     cp -r ~/ripgrep/kettle-build tests/fixtures/ripgrep
+    cp ~/ripgrep/Cargo.lock tests/fixtures/ripgrep/Cargo.lock
 )
 
 (

@@ -59,6 +59,7 @@ pub async fn attest_with_sink(args: AttestArgs, sink: &crate::toolchain::EventSi
     let evidence_json = attestation::attest(platform, report_data.as_slice(), &Default::default())
         .await
         .expect("attestation failed");
+    let evidence_json = embed_snp_vcek(evidence_json).await?;
     fs_err::write(path.join("kettle-build/evidence.json"), evidence_json)?;
 
     println!("Attestation complete! Evidence written to file `evidence.json`");
@@ -74,4 +75,61 @@ pub async fn attest_with_sink(_args: AttestArgs, _sink: &crate::toolchain::Event
     Err(anyhow!(
         "Attestation is disabled. Rebuild Kettle with `--features attest` to enable this command."
     ))
+}
+
+// SEV firmware sometimes returns an SnpEvidence with no cert chain (the host
+// hasn't provisioned the VCEK). Browser-side verifiers can't reach AMD KDS, so
+// we fetch the VCEK here and embed it before writing the evidence.
+#[cfg(all(feature = "attest", target_os = "linux"))]
+async fn embed_snp_vcek(evidence_json: Vec<u8>) -> Result<Vec<u8>> {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+    use sev::firmware::guest::AttestationReport;
+    use sev::parser::ByteParser;
+
+    let mut envelope: serde_json::Value = serde_json::from_slice(&evidence_json)?;
+    if envelope.get("platform").and_then(|p| p.as_str()) != Some("snp") {
+        return Ok(evidence_json);
+    }
+    let evidence = envelope.get_mut("evidence").ok_or_else(|| anyhow!("evidence missing"))?;
+    if !evidence.get("cert_chain").is_some_and(|c| c.is_null()) {
+        return Ok(evidence_json);
+    }
+    let report_b64 = evidence
+        .get("attestation_report")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("attestation_report missing"))?;
+    let report_bytes = BASE64.decode(report_b64).map_err(|e| anyhow!("report base64: {e}"))?;
+    let report = AttestationReport::from_bytes(&report_bytes)
+        .map_err(|e| anyhow!("SNP report parse: {e}"))?;
+
+    let cpuid_fam = report.cpuid_fam_id.unwrap_or(0);
+    let cpuid_mod = report.cpuid_mod_id.unwrap_or(0);
+    let processor_gen = attestation::ProcessorGeneration::from_cpuid(cpuid_fam, cpuid_mod)
+        .ok_or_else(|| anyhow!("unknown SNP processor family={cpuid_fam:#x} model={cpuid_mod:#x}"))?;
+
+    let mut chip_id = [0u8; 64];
+    chip_id.copy_from_slice(&report.chip_id[..]);
+    let tcb = attestation::SnpTcb {
+        bootloader: report.reported_tcb.bootloader,
+        tee: report.reported_tcb.tee,
+        snp: report.reported_tcb.snp,
+        microcode: report.reported_tcb.microcode,
+        fmc: if processor_gen == attestation::ProcessorGeneration::Turin {
+            report.reported_tcb.fmc
+        } else {
+            None
+        },
+    };
+
+    let provider = attestation::DefaultCertProvider::new();
+    let vcek_der = attestation::CertProvider::get_snp_vcek(&provider, processor_gen, &chip_id, &tcb)
+        .await
+        .map_err(|e| anyhow!("VCEK fetch from AMD KDS failed: {e}"))?;
+    evidence["cert_chain"] = serde_json::json!({
+        "vcek": BASE64.encode(&vcek_der),
+        "ask": null,
+        "ark": null,
+    });
+    tracing::info!("embedded VCEK ({} bytes) into SnpEvidence", vcek_der.len());
+    Ok(serde_json::to_vec(&envelope)?)
 }

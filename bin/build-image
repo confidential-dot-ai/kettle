@@ -84,13 +84,21 @@ EOF
   echo "  - systemctl enable --now kettle-server.service"
 } > "$OUT"
 
+cat <<BASH > "../kettle/target/steep/install.sh"
+#!/bin/bash
+set -euo pipefail
+set -x
+sh <(curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install) --daemon --yes
+BASH
+
 (
     cd ../steep
     bin/steep build "$REPO_ROOT/target/image" \
       --smp 10 --memory 20G \
-      -e ../kettle/target/steep/mkosi.extra \
-      -c ../kettle/target/steep/user-data.yml \
-      -p git,curl,ca-certificates,build-essential,cargo,tpm2-tss \
+      --extra ../kettle/target/steep/mkosi.extra \
+      --cloud-init ../kettle/target/steep/user-data.yml \
+      --package git,curl,ca-certificates,build-essential,cargo,tpm2-tss \
+      --script ../kettle/target/steep/install.sh \
       --console
 )
 

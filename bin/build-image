@@ -30,9 +30,25 @@ fi
 if [[ $FORCE -eq 1 ]]; then
   rm -rf "$REPO_ROOT/target/steep"
 fi
+
+# set up reproducible kettle-server for the image
 mkdir -p "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
 cp "$BIN" "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
 
+# download the nix installer to be run later
+(
+    mkdir -p "$REPO_ROOT/target/steep/mkosi.extra/opt"
+    cd "$REPO_ROOT/target/steep/mkosi.extra/opt"
+    export VERSION=2.28.0
+    export SYSTEM=x86_64-linux
+    test -d nix-$VERSION-$SYSTEM || (
+        curl -LO https://releases.nixos.org/nix/nix-$VERSION/nix-$VERSION-$SYSTEM.tar.xz
+        tar xf nix-$VERSION-$SYSTEM.tar.xz
+        rm -rf nix-$VERSION-$SYSTEM.tar.xz
+    )
+)
+
+# set up the cloud-init user-data file
 OUT="$REPO_ROOT/target/steep/user-data.yml"
 
 read -r -d '' UNIT <<'EOF' || true
@@ -46,7 +62,6 @@ ExecStart=/usr/local/bin/kettle-server
 Restart=no
 User=kettle
 Group=kettle
-DynamicUser=yes
 NoNewPrivileges=yes
 CacheDirectory=kettle-server
 Environment=CARGO_HOME=/var/cache/kettle-server/cargo
@@ -58,9 +73,9 @@ EOF
 
 {
   echo "#cloud-config"
-  # The kettle-server runs as a DynamicUser, so it can't own /dev/sev-guest
-  # directly. Instead, create a static group, grant it the device via a udev
-  # rule, and add the service's dynamic user to that group.
+  echo "users:"
+  echo "  - name: kettle"
+  echo "    groups: [sev-guest]"
   echo "groups:"
   echo "  - sev-guest"
   echo "write_files:"
@@ -82,23 +97,17 @@ EOF
   echo "  - udevadm control --reload-rules"
   echo "  - udevadm trigger --name-match=/dev/sev-guest"
   echo "  - systemctl enable --now kettle-server.service"
+  echo "  - bash -c 'cd /opt/nix*; ./install --yes'"
 } > "$OUT"
 
-cat <<BASH > "../kettle/target/steep/install.sh"
-#!/bin/bash
-set -euo pipefail
-set -x
-sh <(curl --proto '=https' --tlsv1.2 -L https://nixos.org/nix/install) --daemon --yes
-BASH
-
+# run steep to build the image
 (
-    cd ../steep
+    cd ~/steep
     bin/steep build "$REPO_ROOT/target/image" \
       --smp 10 --memory 20G \
-      --extra ../kettle/target/steep/mkosi.extra \
-      --cloud-init ../kettle/target/steep/user-data.yml \
+      --extra $REPO_ROOT/target/steep/mkosi.extra \
+      --cloud-init $REPO_ROOT/target/steep/user-data.yml \
       --package git,curl,ca-certificates,build-essential,cargo,tpm2-tss \
-      --script ../kettle/target/steep/install.sh \
       --console
 )
 

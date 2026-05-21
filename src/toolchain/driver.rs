@@ -186,8 +186,10 @@ pub(crate) trait ToolchainDriver: Sized {
     /// Lockfile filename relative to the project root (e.g. "Cargo.lock", "flake.lock").
     fn lockfile_filename() -> &'static str;
 
-    /// Human-readable build invocation for printing (e.g. "cargo build --locked --release").
-    fn build_command_display() -> &'static str;
+    /// Exact build invocation that `run_build` executes, joined for display
+    /// and the provenance `buildCommand` field. Must be derived from the same
+    /// args passed to the underlying `Command` so the two cannot drift.
+    fn build_command_display() -> String;
 
     /// Collect toolchain-specific inputs.
     /// Receives pre-computed git context, lockfile hash, and raw lockfile bytes.

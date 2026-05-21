@@ -36,6 +36,16 @@ pub(crate) fn build(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Resul
     crate::toolchain::runner::run::<NixInputs>(path, sink)
 }
 
+const BUILD_ARGS: &[&str] = &[
+    "build",
+    "--no-link",
+    "--print-out-paths",
+    "--extra-experimental-features",
+    "nix-command",
+    "--extra-experimental-features",
+    "flakes",
+];
+
 #[derive(Debug)]
 struct NixInputs {
     kettle_version: String,
@@ -53,8 +63,8 @@ impl ToolchainDriver for NixInputs {
         "flake.lock"
     }
 
-    fn build_command_display() -> &'static str {
-        "nix build --no-link --print-out-paths"
+    fn build_command_display() -> String {
+        format!("nix {}", BUILD_ARGS.join(" "))
     }
 
     fn collect_inputs(
@@ -101,16 +111,7 @@ impl ToolchainDriver for NixInputs {
 
     fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput> {
         let mut cmd = Command::new("nix");
-        cmd.args([
-            "build",
-            "--no-link",
-            "--print-out-paths",
-            "--extra-experimental-features",
-            "nix-command",
-            "--extra-experimental-features",
-            "flakes",
-        ])
-        .current_dir(path);
+        cmd.args(BUILD_ARGS).current_dir(path);
         let stdout = crate::toolchain::runner::stream_command(&mut cmd, sink)
             .map_err(|e| anyhow!("nix build failed: {}", e))?;
         Ok(BuildOutput { stdout })
@@ -172,7 +173,7 @@ impl ToolchainDriver for NixInputs {
 
         ProvenanceFields {
             build_type: "https://lunal.dev/kettle/nix@v1".to_string(),
-            external_build_command: "nix build".to_string(),
+            external_build_command: Self::build_command_display(),
             internal_parameters: InternalParameters {
                 evaluation: Some(evaluation),
                 flake_inputs: if flake_inputs.is_empty() {

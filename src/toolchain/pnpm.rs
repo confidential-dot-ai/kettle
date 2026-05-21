@@ -15,6 +15,9 @@ pub(crate) fn build(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Resul
     crate::toolchain::runner::run::<PnpmInputs>(path, sink)
 }
 
+const INSTALL_ARGS: &[&str] = &["install", "--frozen-lockfile"];
+const BUILD_ARGS: &[&str] = &["build"];
+
 #[derive(Debug)]
 struct PnpmInputs {
     node_version: String,
@@ -32,8 +35,12 @@ impl ToolchainDriver for PnpmInputs {
         "pnpm-lock.yaml"
     }
 
-    fn build_command_display() -> &'static str {
-        "pnpm install --frozen-lockfile && pnpm build"
+    fn build_command_display() -> String {
+        format!(
+            "pnpm {} && pnpm {}",
+            INSTALL_ARGS.join(" "),
+            BUILD_ARGS.join(" ")
+        )
     }
 
     fn collect_inputs(
@@ -79,14 +86,12 @@ impl ToolchainDriver for PnpmInputs {
 
     fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput> {
         let mut install_cmd = Command::new("pnpm");
-        install_cmd
-            .args(["install", "--frozen-lockfile"])
-            .current_dir(path);
+        install_cmd.args(INSTALL_ARGS).current_dir(path);
         let _ = crate::toolchain::runner::stream_command(&mut install_cmd, sink)
             .map_err(|e| anyhow!("pnpm install --frozen-lockfile failed: {}", e))?;
 
         let mut build_cmd = Command::new("pnpm");
-        build_cmd.arg("build").current_dir(path);
+        build_cmd.args(BUILD_ARGS).current_dir(path);
         let stdout = crate::toolchain::runner::stream_command(&mut build_cmd, sink)
             .map_err(|e| anyhow!("pnpm build failed: {}", e))?;
 
@@ -133,7 +138,7 @@ impl ToolchainDriver for PnpmInputs {
     fn provenance_fields(self, _git: &GitContext, _merkle_root: &str) -> ProvenanceFields {
         ProvenanceFields {
             build_type: "https://lunal.dev/kettle/pnpm@v1".to_string(),
-            external_build_command: "pnpm build".to_string(),
+            external_build_command: Self::build_command_display(),
             internal_parameters: InternalParameters {
                 evaluation: None,
                 flake_inputs: None,

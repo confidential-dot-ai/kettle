@@ -187,8 +187,8 @@ fn verify_provenance(
                 "Provenance checksum mismatch",
                 &format!(
                     "Expected provenance.json checksum {:?}\nActual provenance.json checksum   {:?}",
-                    hex::encode(&signed_data),
-                    hex::encode(&checksum)
+                    hex::encode(signed_checksum),
+                    hex::encode(checksum)
                 ),
             ),
         }
@@ -355,6 +355,23 @@ mod tests {
                 assert!(message.contains("match"), "message: {message}");
             }
             Verification::Failure { message, .. } => panic!("expected success: {message}"),
+        }
+    }
+
+    #[test]
+    fn verify_provenance_mismatch_shows_attested_checksum() {
+        let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
+        let signed_data = vec![0xab; 32];
+        let vr = make_verification_result(true, signed_data);
+        match verify_provenance(&vr, &provenance) {
+            Verification::Failure { message, details } => {
+                assert!(message.contains("mismatch"), "message: {message}");
+                assert!(
+                    details.contains(&"ab".repeat(32)),
+                    "details should show the attested checksum hex: {details}"
+                );
+            }
+            Verification::Success { .. } => panic!("expected failure"),
         }
     }
 

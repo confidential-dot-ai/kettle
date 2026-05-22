@@ -100,7 +100,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/kettle-server
+ExecStart=/bin/bash -lc 'exec /usr/local/bin/kettle-server'
 Restart=no
 User=kettle
 Group=kettle

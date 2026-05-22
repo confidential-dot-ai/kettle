@@ -165,7 +165,7 @@ fn verify_provenance(
                 message: "Attested checksum invalid".to_string(),
                 details: format!(
                     "Expected attestation checksum {:?} to be 32 bytes",
-                    signed_checksum
+                    hex::encode(signed_checksum)
                 ),
             };
         }
@@ -176,7 +176,7 @@ fn verify_provenance(
                 message: "Provenance checksum invalid".to_string(),
                 details: format!(
                     "Expected provenance.json checksum {:?} to be 32 bytes",
-                    checksum
+                    hex::encode(checksum)
                 ),
             };
         }
@@ -187,7 +187,8 @@ fn verify_provenance(
                 "Provenance checksum mismatch",
                 &format!(
                     "Expected provenance.json checksum {:?}\nActual provenance.json checksum   {:?}",
-                    signed_data, checksum
+                    hex::encode(&signed_data),
+                    hex::encode(&checksum)
                 ),
             ),
         }

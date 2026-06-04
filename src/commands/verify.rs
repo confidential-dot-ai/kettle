@@ -25,12 +25,18 @@ pub struct VerifyArgs {
     /// attested launch measurement matches this IGVM's launch digest.
     #[arg(long)]
     igvm: Option<PathBuf>,
+    /// Path to the disk image (disk.raw). When set, verifies that the dm-verity
+    /// roothash committed inside the IGVM matches the disk's stored roothash.
+    /// Requires --igvm.
+    #[arg(long, requires = "igvm")]
+    image: Option<PathBuf>,
 }
 
 pub async fn verify(args: VerifyArgs) -> Result<()> {
     let path = args.path;
     let nonce = args.nonce;
     let igvm = args.igvm;
+    let image = args.image;
     let build = Build::from_dir(&path)?;
 
     // Get the provenance and attestation
@@ -47,6 +53,9 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     }
     if let Some(igvm_path) = &igvm {
         results.push(verify_igvm_measurement(&verification, igvm_path));
+    }
+    if let (Some(igvm_path), Some(image_path)) = (&igvm, &image) {
+        results.push(verify_image_roothash(igvm_path, image_path));
     }
 
     // Print build information
@@ -197,6 +206,58 @@ fn verify_igvm_measurement(
         Err(e) => return Verification::failure("Could not measure IGVM file", &e),
     };
     compare_launch_digest(&measured, &verification_result.claims.launch_digest)
+}
+
+/// Pull the `roothash=<hex>` value out of a kernel command line.
+fn roothash_from_cmdline(cmdline: &str) -> Result<String, String> {
+    cmdline
+        .split_whitespace()
+        .find_map(|tok| tok.strip_prefix("roothash="))
+        .map(|s| s.to_string())
+        .ok_or_else(|| "no roothash= in IGVM kernel command line".to_string())
+}
+
+/// Compare the roothash committed in the IGVM against the disk's stored roothash.
+fn compare_roothash(igvm_roothash: &str, disk_roothash: &str) -> Verification {
+    if igvm_roothash.eq_ignore_ascii_case(disk_roothash) {
+        Verification::success("Disk image matches IGVM dm-verity roothash")
+    } else {
+        Verification::failure(
+            "Disk image roothash mismatch",
+            &format!(
+                "IGVM-committed roothash   {igvm_roothash}\nDisk image roothash       {disk_roothash}",
+            ),
+        )
+    }
+}
+
+/// Verify that the dm-verity roothash committed inside the IGVM matches the
+/// roothash stored in the disk image. Reported as a verification failure (never
+/// a panic) on any structural problem.
+fn verify_image_roothash(igvm_path: &Path, image_path: &Path) -> Verification {
+    let bytes = match fs_err::read(igvm_path) {
+        Ok(b) => b,
+        Err(e) => return Verification::failure("Could not read IGVM file", &e.to_string()),
+    };
+    let igvm_file = match igvm::IgvmFile::new_from_binary(&bytes, None) {
+        Ok(f) => f,
+        Err(e) => return Verification::failure("Could not parse IGVM file", &e.to_string()),
+    };
+    let cmdline = match igvm_tools::extract::kernel_cmdline(&igvm_file) {
+        Ok(c) => c,
+        Err(e) => return Verification::failure("Could not read IGVM kernel command line", &e),
+    };
+    let igvm_roothash = match roothash_from_cmdline(&cmdline) {
+        Ok(r) => r,
+        Err(e) => return Verification::failure("No roothash in IGVM", &e),
+    };
+    let disk_roothash = match crate::verity::stored_roothash(image_path) {
+        Ok(r) => r,
+        Err(e) => {
+            return Verification::failure("Could not read disk image roothash", &e.to_string())
+        }
+    };
+    compare_roothash(&igvm_roothash, &disk_roothash)
 }
 
 fn verify_provenance(
@@ -579,6 +640,40 @@ mod tests {
             Verification::Failure { message, details } => {
                 assert!(message.contains("mismatch"), "message: {message}");
                 assert!(details.contains(&measured) && details.contains(&attested));
+            }
+            Verification::Success { .. } => panic!("expected failure"),
+        }
+    }
+
+    // --- roothash_from_cmdline ---
+
+    #[test]
+    fn roothash_from_cmdline_extracts_hex() {
+        let cmd = "console=hvc0 roothash=abc123def systemd.condition-first-boot=no";
+        assert_eq!(roothash_from_cmdline(cmd).unwrap(), "abc123def");
+    }
+
+    #[test]
+    fn roothash_from_cmdline_missing() {
+        assert!(roothash_from_cmdline("console=hvc0 quiet").is_err());
+    }
+
+    // --- compare_roothash ---
+
+    #[test]
+    fn compare_roothash_match() {
+        match compare_roothash("deadbeef", "DEADBEEF") {
+            Verification::Success { message } => assert!(message.contains("roothash")),
+            Verification::Failure { message, .. } => panic!("expected success: {message}"),
+        }
+    }
+
+    #[test]
+    fn compare_roothash_mismatch_shows_both() {
+        match compare_roothash("aaaa", "bbbb") {
+            Verification::Failure { message, details } => {
+                assert!(message.contains("mismatch"));
+                assert!(details.contains("aaaa") && details.contains("bbbb"));
             }
             Verification::Success { .. } => panic!("expected failure"),
         }

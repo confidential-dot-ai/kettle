@@ -12,6 +12,7 @@
 
 pub mod build;
 pub mod builder;
+pub mod extract;
 pub mod hob;
 pub mod hypervisor;
 pub mod manifest;

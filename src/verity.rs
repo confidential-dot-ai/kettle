@@ -48,6 +48,8 @@ pub fn roothash_from_verity_partition(part: &[u8]) -> Result<String> {
     if version != 1 {
         bail!("unsupported dm-verity superblock version: {version}");
     }
+    // unwrap_or(32): if the 32-byte algorithm field has no NUL terminator, use
+    // it whole; digest_with_salt rejects any unknown algorithm name anyway.
     let algo_end = 32 + part[32..64].iter().position(|&b| b == 0).unwrap_or(32);
     let algo = std::str::from_utf8(&part[32..algo_end])
         .context("verity algorithm not UTF-8")?
@@ -93,8 +95,19 @@ fn find_verity_partition(disk: &[u8]) -> Result<(usize, usize)> {
             if last < first {
                 bail!("verity partition has EndingLBA {last} before StartingLBA {first}");
             }
-            let start = first as usize * LBA as usize;
-            let len = (last + 1 - first) as usize * LBA as usize;
+            // Checked arithmetic throughout: first/last come straight from the
+            // on-disk GPT entry, so a crafted image must not panic here.
+            let lba_count = (last - first)
+                .checked_add(1)
+                .context("verity partition LBA range overflows u64")?;
+            let start = first
+                .checked_mul(LBA)
+                .and_then(|v| usize::try_from(v).ok())
+                .context("verity partition offset overflows")?;
+            let len = lba_count
+                .checked_mul(LBA)
+                .and_then(|v| usize::try_from(v).ok())
+                .context("verity partition length overflows")?;
             return Ok((start, len));
         }
         off += entry_size;
@@ -106,9 +119,12 @@ fn find_verity_partition(disk: &[u8]) -> Result<(usize, usize)> {
 pub fn stored_roothash(image_path: &Path) -> Result<String> {
     let disk = fs_err::read(image_path)?;
     let (start, len) = find_verity_partition(&disk)?;
+    let end = start
+        .checked_add(len)
+        .context("verity partition address overflows")?;
     let part = disk
-        .get(start..start + len.min(disk.len().saturating_sub(start)))
-        .context("verity partition out of range")?;
+        .get(start..end)
+        .context("verity partition extends past end of disk")?;
     roothash_from_verity_partition(part)
 }
 
@@ -228,6 +244,18 @@ mod tests {
         let path = dir.path().join("disk.raw");
         fs_err::write(&path, &disk).unwrap();
         assert!(stored_roothash(&path).is_err());
+    }
+
+    #[test]
+    fn find_verity_rejects_overflowing_lba_range() {
+        // EndingLBA = u64::MAX, StartingLBA = 0: last+1 would overflow. Must
+        // error, not panic.
+        let part = synthetic_verity_partition(&[0u8; 32], &[0u8; 4096]);
+        let mut disk = synthetic_disk(40, &part);
+        let e = 2 * 512;
+        disk[e + 32..e + 40].copy_from_slice(&0u64.to_le_bytes()); // StartingLBA
+        disk[e + 40..e + 48].copy_from_slice(&u64::MAX.to_le_bytes()); // EndingLBA
+        assert!(find_verity_partition(&disk).is_err());
     }
 
     #[test]

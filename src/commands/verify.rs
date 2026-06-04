@@ -2,7 +2,7 @@ use anyhow::Result;
 use attestation::VerificationResult;
 use colored::Colorize;
 use fs_err::DirEntry;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use tabled::builder::Builder;
 use tabled::settings::object::Columns;
@@ -21,11 +21,16 @@ pub struct VerifyArgs {
     /// Can be up to 16 bytes.
     #[arg(short, long)]
     nonce: Option<String>,
+    /// Path to the IGVM file the CVM booted from. When set, verifies that the
+    /// attested launch measurement matches this IGVM's launch digest.
+    #[arg(long)]
+    igvm: Option<PathBuf>,
 }
 
 pub async fn verify(args: VerifyArgs) -> Result<()> {
     let path = args.path;
     let nonce = args.nonce;
+    let igvm = args.igvm;
     let build = Build::from_dir(&path)?;
 
     // Get the provenance and attestation
@@ -39,6 +44,9 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     results.extend(provenance.verify_artifacts(&build.artifacts)?);
     if let Some(nonce) = nonce {
         results.push(verify_nonce(&verification, nonce));
+    }
+    if let Some(igvm_path) = &igvm {
+        results.push(verify_igvm_measurement(&verification, igvm_path));
     }
 
     // Print build information
@@ -152,6 +160,43 @@ fn verify_signature(verification_result: &VerificationResult) -> Verification {
             "signature verification failed",
         ),
     }
+}
+
+/// Compare a measured IGVM launch digest (hex) against the attested one.
+/// Both are SHA-384 hex strings; comparison is case-insensitive.
+fn compare_launch_digest(measured_hex: &str, attested_hex: &str) -> Verification {
+    if measured_hex.eq_ignore_ascii_case(attested_hex) {
+        Verification::success("IGVM launch measurement matches attestation")
+    } else {
+        Verification::failure(
+            "IGVM launch measurement mismatch",
+            &format!(
+                "IGVM file launch digest   {measured_hex}\nAttested launch digest    {attested_hex}",
+            ),
+        )
+    }
+}
+
+/// Measure the given IGVM file and compare its SNP launch digest to the
+/// attested launch measurement. Any parse/measure error is reported as a
+/// verification failure rather than aborting the whole `verify` run.
+fn verify_igvm_measurement(
+    verification_result: &VerificationResult,
+    igvm_path: &Path,
+) -> Verification {
+    let bytes = match fs_err::read(igvm_path) {
+        Ok(b) => b,
+        Err(e) => return Verification::failure("Could not read IGVM file", &e.to_string()),
+    };
+    let igvm = match igvm::IgvmFile::new_from_binary(&bytes, None) {
+        Ok(f) => f,
+        Err(e) => return Verification::failure("Could not parse IGVM file", &e.to_string()),
+    };
+    let measured = match igvm_tools::measure::measure_snp(&igvm, false) {
+        Ok(r) => hex::encode(r.launch_digest),
+        Err(e) => return Verification::failure("Could not measure IGVM file", &e),
+    };
+    compare_launch_digest(&measured, &verification_result.claims.launch_digest)
 }
 
 fn verify_provenance(
@@ -513,5 +558,29 @@ mod tests {
 
         let build = Build::from_dir(&tmp.path().to_path_buf()).unwrap();
         assert!(build.artifacts.is_empty());
+    }
+
+    // --- verify_igvm_measurement (digest comparison) ---
+
+    #[test]
+    fn igvm_measurement_match() {
+        let digest = "ab".repeat(48); // 48-byte SHA-384, hex
+        match compare_launch_digest(&digest, &digest.to_uppercase()) {
+            Verification::Success { message } => assert!(message.contains("launch measurement")),
+            Verification::Failure { message, .. } => panic!("expected success: {message}"),
+        }
+    }
+
+    #[test]
+    fn igvm_measurement_mismatch_shows_both() {
+        let measured = "ab".repeat(48);
+        let attested = "cd".repeat(48);
+        match compare_launch_digest(&measured, &attested) {
+            Verification::Failure { message, details } => {
+                assert!(message.contains("mismatch"), "message: {message}");
+                assert!(details.contains(&measured) && details.contains(&attested));
+            }
+            Verification::Success { .. } => panic!("expected failure"),
+        }
     }
 }

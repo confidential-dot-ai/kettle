@@ -97,6 +97,12 @@ tower = "0.5"
 [build-dependencies]
 shadow-rs = "1.7.1"
 
+# Optimize the SHA crate even in debug builds. The SNP IGVM launch measurement
+# (igvm-tools::measure) runs two SHA-384 hashes per guest page; unoptimized it
+# dominates `kettle verify` (~8s vs ~0.2s). Keeps our own code in debug.
+[profile.dev.package.sha2]
+opt-level = 3
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"

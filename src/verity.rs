@@ -8,11 +8,18 @@
 
 use std::path::Path;
 
+use fs_err::os::unix::fs::FileExt;
+
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256, Sha512};
 
 const LBA: u64 = 512;
 const VERITY_MAGIC: &[u8; 8] = b"verity\0\0";
+
+/// Bytes read from the front of the disk to parse the GPT header and partition
+/// table. The protective MBR + header sit at LBA0/LBA1 and a standard table is
+/// 128 entries × 128 bytes starting at LBA2, so 64 KiB covers it comfortably.
+const HEAD_BYTES: u64 = 64 * 1024;
 
 /// GPT partition type GUID for `root-verity` (x86-64), in GPT on-disk
 /// (mixed-endian) byte order: 2c7357ed-ebd2-46d9-aec1-23d437ec2bf5.
@@ -116,16 +123,42 @@ fn find_verity_partition(disk: &[u8]) -> Result<(usize, usize)> {
 }
 
 /// Read the dm-verity root hash stored in a disk image's verity partition.
+///
+/// Only the bytes actually needed are read — the GPT header/table from the front
+/// of the disk, then the verity partition's superblock and root hash block —
+/// rather than slurping the whole (multi-GB) image into memory.
 pub fn stored_roothash(image_path: &Path) -> Result<String> {
-    let disk = fs_err::read(image_path)?;
-    let (start, len) = find_verity_partition(&disk)?;
-    let end = start
-        .checked_add(len)
-        .context("verity partition address overflows")?;
-    let part = disk
-        .get(start..end)
-        .context("verity partition extends past end of disk")?;
-    roothash_from_verity_partition(part)
+    let file = fs_err::File::open(image_path)?;
+
+    // Read the front of the disk to locate the verity partition via the GPT.
+    let total = file.metadata()?.len();
+    let mut head = vec![0u8; total.min(HEAD_BYTES) as usize];
+    file.read_exact_at(&mut head, 0)
+        .context("reading GPT header from disk image")?;
+    let (start, _len) = find_verity_partition(&head)?;
+    let start = start as u64;
+
+    // Read the verity partition's superblock (first block) to learn its hash
+    // block size, then read the superblock plus the root hash block. The root
+    // hash is H(salt ‖ block at hash_block_size), so this is all we need — no
+    // need to read the rest of the (tens of MB) hash tree.
+    let mut part = vec![0u8; 4096];
+    file.read_exact_at(&mut part, start)
+        .context("reading verity superblock from disk image")?;
+    let hash_block_size = u32::from_le_bytes(
+        part[68..72]
+            .try_into()
+            .context("verity superblock too short for hash block size")?,
+    ) as usize;
+    let needed = hash_block_size
+        .checked_mul(2)
+        .context("verity hash block size overflows")?;
+    if needed > part.len() {
+        part.resize(needed, 0);
+        file.read_exact_at(&mut part, start)
+            .context("reading verity root hash block from disk image")?;
+    }
+    roothash_from_verity_partition(&part)
 }
 
 #[cfg(test)]
@@ -208,6 +241,47 @@ mod tests {
         root_block[..5].copy_from_slice(b"hello");
         let part = synthetic_verity_partition(&salt, &root_block);
         let disk = synthetic_disk(40, &part);
+
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("disk.raw");
+        fs_err::write(&path, &disk).unwrap();
+
+        let got = stored_roothash(&path).unwrap();
+        let expected = roothash_from_verity_partition(&part).unwrap();
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn stored_roothash_does_not_require_full_hash_tree() {
+        // A real verity partition declares its full length (the whole hash
+        // tree, tens of MB), but only the superblock + root hash block are
+        // needed to read the stored root hash. stored_roothash must succeed
+        // even when the file ends right after the root block — i.e. it must
+        // not depend on the entire declared partition being present/read.
+        let salt = [0x33u8; 32];
+        let mut root_block = [0u8; 4096];
+        root_block[..3].copy_from_slice(b"abc");
+        let part = synthetic_verity_partition(&salt, &root_block); // 8192 bytes
+
+        // Place verity far into the disk, declare it spanning ~51 MB, but only
+        // write the 8192 bytes that actually hold the superblock + root block.
+        let entries_lba = 2u64;
+        let part_lba = 2048u64;
+        let declared_end_lba = part_lba + 100_000 - 1;
+
+        let file_len = part_lba as usize * 512 + part.len();
+        let mut disk = vec![0u8; file_len];
+        let h = 512;
+        disk[h..h + 8].copy_from_slice(b"EFI PART");
+        disk[h + 72..h + 80].copy_from_slice(&entries_lba.to_le_bytes());
+        disk[h + 80..h + 84].copy_from_slice(&1u32.to_le_bytes());
+        disk[h + 84..h + 88].copy_from_slice(&128u32.to_le_bytes());
+        let e = entries_lba as usize * 512;
+        disk[e..e + 16].copy_from_slice(&VERITY_TYPE_GUID);
+        disk[e + 32..e + 40].copy_from_slice(&part_lba.to_le_bytes());
+        disk[e + 40..e + 48].copy_from_slice(&declared_end_lba.to_le_bytes());
+        let p = part_lba as usize * 512;
+        disk[p..p + part.len()].copy_from_slice(&part);
 
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("disk.raw");

@@ -121,6 +121,19 @@ Verify the attested build created above like this:
 kettle verify ripgrep/kettle-build
 ```
 
+Two optional flags tie the attestation to the exact VM image that produced it:
+
+- `--igvm <FILE>` — verify that the attested launch measurement matches this IGVM
+  file's launch digest, proving the build ran in a confidential VM booted from
+  exactly this IGVM.
+- `--image <FILE>` — verify that the dm-verity roothash committed inside the IGVM
+  matches the roothash stored in this disk image (`disk.raw`), binding the
+  verified IGVM to a specific root filesystem. Requires `--igvm`.
+
+```bash
+kettle verify ripgrep/kettle-build --igvm guest.igvm --image disk.raw
+```
+
 ## Supported toolchains
 
 Today, Kettle supports building, attesting, and verifying software packaged with:

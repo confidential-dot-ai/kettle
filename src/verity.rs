@@ -76,6 +76,11 @@ fn find_verity_partition(disk: &[u8]) -> Result<(usize, usize)> {
     let entries_lba = u64::from_le_bytes(header[72..80].try_into().unwrap());
     let num_entries = u32::from_le_bytes(header[80..84].try_into().unwrap()) as usize;
     let entry_size = u32::from_le_bytes(header[84..88].try_into().unwrap()) as usize;
+    // A GPT entry holds the type GUID (0..16) plus the start/end LBAs (32..48)
+    // we read below; reject a table whose declared entry size can't hold them.
+    if entry_size < 48 {
+        bail!("GPT partition entry size too small: {entry_size}");
+    }
 
     let mut off = entries_lba as usize * LBA as usize;
     for _ in 0..num_entries {
@@ -85,6 +90,9 @@ fn find_verity_partition(disk: &[u8]) -> Result<(usize, usize)> {
         if entry[0..16] == VERITY_TYPE_GUID {
             let first = u64::from_le_bytes(entry[32..40].try_into().unwrap());
             let last = u64::from_le_bytes(entry[40..48].try_into().unwrap());
+            if last < first {
+                bail!("verity partition has EndingLBA {last} before StartingLBA {first}");
+            }
             let start = first as usize * LBA as usize;
             let len = (last + 1 - first) as usize * LBA as usize;
             return Ok((start, len));
@@ -99,7 +107,7 @@ pub fn stored_roothash(image_path: &Path) -> Result<String> {
     let disk = fs_err::read(image_path)?;
     let (start, len) = find_verity_partition(&disk)?;
     let part = disk
-        .get(start..start + len.min(disk.len() - start))
+        .get(start..start + len.min(disk.len().saturating_sub(start)))
         .context("verity partition out of range")?;
     roothash_from_verity_partition(part)
 }
@@ -192,6 +200,34 @@ mod tests {
         let got = stored_roothash(&path).unwrap();
         let expected = roothash_from_verity_partition(&part).unwrap();
         assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn find_verity_rejects_tiny_entry_size() {
+        // A GPT whose declared SizeOfPartitionEntry can't hold the fields we
+        // read must error, not panic.
+        let mut disk = vec![0u8; 4096];
+        disk[512..520].copy_from_slice(b"EFI PART");
+        disk[512 + 72..512 + 80].copy_from_slice(&2u64.to_le_bytes()); // PartitionEntryLBA
+        disk[512 + 80..512 + 84].copy_from_slice(&1u32.to_le_bytes()); // NumberOfPartitionEntries
+        disk[512 + 84..512 + 88].copy_from_slice(&8u32.to_le_bytes()); // SizeOfPartitionEntry (too small)
+        assert!(find_verity_partition(&disk).is_err());
+    }
+
+    #[test]
+    fn stored_roothash_handles_partition_start_beyond_disk() {
+        // A verity entry whose StartingLBA points past the end of the file must
+        // error, not panic (no usize underflow).
+        let part = synthetic_verity_partition(&[0u8; 32], &[0u8; 4096]);
+        let mut disk = synthetic_disk(40, &part);
+        // Rewrite the entry's StartingLBA to a wildly out-of-range value.
+        let e = 2 * 512;
+        disk[e + 32..e + 40].copy_from_slice(&1_000_000u64.to_le_bytes());
+
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("disk.raw");
+        fs_err::write(&path, &disk).unwrap();
+        assert!(stored_roothash(&path).is_err());
     }
 
     #[test]

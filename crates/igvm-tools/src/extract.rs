@@ -123,18 +123,35 @@ pub fn find_kernel_blob(pages: &BTreeMap<u64, Vec<u8>>) -> Result<(u64, u64), St
 }
 
 /// Reassemble `length` bytes starting at guest address `addr` from the page map.
+///
+/// `addr`/`length` come from an on-disk HOB entry, so a malformed IGVM must
+/// produce an error here, never a panic or a giant allocation.
 pub fn reassemble(pages: &BTreeMap<u64, Vec<u8>>, addr: u64, length: u64) -> Result<Vec<u8>, String> {
-    let mut out = Vec::with_capacity(length as usize);
+    // The blob cannot be larger than everything we measured; reject absurd
+    // HOB lengths before allocating or iterating.
+    let available = (pages.len() as u64) * PAGE_SIZE;
+    if length > available {
+        return Err(format!(
+            "kernel blob length {length} exceeds available measured page bytes {available}"
+        ));
+    }
+    let length = length as usize;
     let mut gpa = addr & !(PAGE_SIZE - 1);
     let skip = (addr - gpa) as usize;
-    while (out.len() as u64) < length + skip as u64 {
+    let needed = length
+        .checked_add(skip)
+        .ok_or("kernel blob address + length overflows")?;
+    let mut out = Vec::with_capacity(needed);
+    while out.len() < needed {
         let page = pages
             .get(&gpa)
             .ok_or_else(|| format!("missing page at gpa {gpa:#x} while reassembling kernel"))?;
         out.extend_from_slice(page);
-        gpa += PAGE_SIZE;
+        gpa = gpa
+            .checked_add(PAGE_SIZE)
+            .ok_or("guest address overflows while reassembling kernel")?;
     }
-    Ok(out[skip..skip + length as usize].to_vec())
+    Ok(out[skip..skip + length].to_vec())
 }
 
 /// Recover the kernel UKI command line from an IGVM file: locate the kernel
@@ -226,6 +243,15 @@ mod tests {
         assert_eq!((addr, len), (0x20000000, 7));
         let bytes = reassemble(&pages, addr, len).expect("kernel bytes");
         assert_eq!(&bytes, b"ABCDEFG");
+    }
+
+    #[test]
+    fn reassemble_rejects_absurd_length() {
+        // A malformed HOB length far larger than the measured pages must error,
+        // not panic or attempt a huge allocation.
+        let mut pages: BTreeMap<u64, Vec<u8>> = BTreeMap::new();
+        pages.insert(0x20000000, vec![0u8; 4096]);
+        assert!(reassemble(&pages, 0x20000000, u64::MAX).is_err());
     }
 
     #[test]

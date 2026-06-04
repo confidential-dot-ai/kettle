@@ -150,7 +150,6 @@ EOF
       --cloud-init $REPO_ROOT/target/steep/user-data.yml \
       --package git,curl,ca-certificates,build-essential,cargo,tpm2-tss,passwd \
       --script $REPO_ROOT/target/steep/install-nix.sh.chroot \
-      --console
 )
 
 echo "./target/steep contains a reproducible build of kettle-server and cloud-init user-data."

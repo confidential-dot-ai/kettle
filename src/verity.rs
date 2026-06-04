@@ -1,0 +1,206 @@
+//! Read the dm-verity root hash stored in a disk image's verity partition.
+//!
+//! The disk (built by steep/mkosi/systemd-repart) is a GPT image whose
+//! `root-verity` partition begins with a 512-byte dm-verity superblock followed
+//! by the hash tree. cryptsetup stores the tree's root level immediately after
+//! the superblock, so the dm-verity root hash is `H(salt ‖ first_hash_block)` —
+//! no data-partition pass or Merkle recomputation is needed.
+
+use std::path::Path;
+
+use anyhow::{bail, Context, Result};
+use sha2::{Digest, Sha256, Sha512};
+
+const LBA: u64 = 512;
+const VERITY_MAGIC: &[u8; 8] = b"verity\0\0";
+
+/// GPT partition type GUID for `root-verity` (x86-64), in GPT on-disk
+/// (mixed-endian) byte order: 2c7357ed-ebd2-46d9-aec1-23d437ec2bf5.
+const VERITY_TYPE_GUID: [u8; 16] = [
+    0xed, 0x57, 0x73, 0x2c, 0xd2, 0xeb, 0xd9, 0x46, 0xae, 0xc1, 0x23, 0xd4, 0x37, 0xec, 0x2b, 0xf5,
+];
+
+fn digest_with_salt(algo: &str, salt: &[u8], block: &[u8]) -> Result<String> {
+    match algo {
+        "sha256" => {
+            let mut h = Sha256::new();
+            h.update(salt);
+            h.update(block);
+            Ok(hex::encode(h.finalize()))
+        }
+        "sha512" => {
+            let mut h = Sha512::new();
+            h.update(salt);
+            h.update(block);
+            Ok(hex::encode(h.finalize()))
+        }
+        other => bail!("unsupported dm-verity hash algorithm: {other}"),
+    }
+}
+
+/// Given the bytes of a verity partition (superblock at offset 0, hash tree
+/// after), compute the dm-verity root hash.
+pub fn roothash_from_verity_partition(part: &[u8]) -> Result<String> {
+    if part.len() < 4096 || &part[0..8] != VERITY_MAGIC {
+        bail!("not a dm-verity partition (bad superblock magic)");
+    }
+    let version = u32::from_le_bytes(part[8..12].try_into().unwrap());
+    if version != 1 {
+        bail!("unsupported dm-verity superblock version: {version}");
+    }
+    let algo_end = 32 + part[32..64].iter().position(|&b| b == 0).unwrap_or(32);
+    let algo = std::str::from_utf8(&part[32..algo_end])
+        .context("verity algorithm not UTF-8")?
+        .to_string();
+    let hash_block_size = u32::from_le_bytes(part[68..72].try_into().unwrap()) as usize;
+    let salt_size = u16::from_le_bytes(part[80..82].try_into().unwrap()) as usize;
+    if 88 + salt_size > part.len() {
+        bail!("verity superblock salt out of range");
+    }
+    let salt = &part[88..88 + salt_size];
+    let root_block = part
+        .get(hash_block_size..hash_block_size * 2)
+        .context("verity partition too small to hold a root hash block")?;
+    digest_with_salt(&algo, salt, root_block)
+}
+
+/// Locate the `root-verity` partition in a GPT disk image and return its
+/// (byte offset, byte length).
+fn find_verity_partition(disk: &[u8]) -> Result<(usize, usize)> {
+    let header = disk
+        .get(LBA as usize..LBA as usize + 92)
+        .context("disk too small for a GPT header")?;
+    if &header[0..8] != b"EFI PART" {
+        bail!("image is not a GPT disk (no 'EFI PART' header at LBA1)");
+    }
+    let entries_lba = u64::from_le_bytes(header[72..80].try_into().unwrap());
+    let num_entries = u32::from_le_bytes(header[80..84].try_into().unwrap()) as usize;
+    let entry_size = u32::from_le_bytes(header[84..88].try_into().unwrap()) as usize;
+
+    let mut off = entries_lba as usize * LBA as usize;
+    for _ in 0..num_entries {
+        let entry = disk
+            .get(off..off + entry_size)
+            .context("GPT partition entry out of range")?;
+        if entry[0..16] == VERITY_TYPE_GUID {
+            let first = u64::from_le_bytes(entry[32..40].try_into().unwrap());
+            let last = u64::from_le_bytes(entry[40..48].try_into().unwrap());
+            let start = first as usize * LBA as usize;
+            let len = (last + 1 - first) as usize * LBA as usize;
+            return Ok((start, len));
+        }
+        off += entry_size;
+    }
+    bail!("no root-verity partition found in disk image");
+}
+
+/// Read the dm-verity root hash stored in a disk image's verity partition.
+pub fn stored_roothash(image_path: &Path) -> Result<String> {
+    let disk = fs_err::read(image_path)?;
+    let (start, len) = find_verity_partition(&disk)?;
+    let part = disk
+        .get(start..start + len.min(disk.len() - start))
+        .context("verity partition out of range")?;
+    roothash_from_verity_partition(part)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+
+    /// A verity partition image = 512-byte superblock (padded to 4096) followed
+    /// by the root hash block at block 1.
+    fn synthetic_verity_partition(salt: &[u8], root_block: &[u8; 4096]) -> Vec<u8> {
+        let mut sb = vec![0u8; 4096];
+        sb[0..8].copy_from_slice(b"verity\0\0");
+        sb[8..12].copy_from_slice(&1u32.to_le_bytes()); // version
+        sb[12..16].copy_from_slice(&1u32.to_le_bytes()); // hash_type
+        sb[32..38].copy_from_slice(b"sha256");
+        sb[64..68].copy_from_slice(&4096u32.to_le_bytes()); // data_block_size
+        sb[68..72].copy_from_slice(&4096u32.to_le_bytes()); // hash_block_size
+        sb[72..80].copy_from_slice(&1u64.to_le_bytes()); // data_blocks
+        sb[80..82].copy_from_slice(&(salt.len() as u16).to_le_bytes());
+        sb[88..88 + salt.len()].copy_from_slice(salt);
+        let mut out = sb;
+        out.extend_from_slice(root_block);
+        out
+    }
+
+    #[test]
+    fn roothash_from_verity_matches_hand_computed() {
+        let salt = [0x11u8; 32];
+        let mut root_block = [0u8; 4096];
+        root_block[..4].copy_from_slice(b"root");
+        let part = synthetic_verity_partition(&salt, &root_block);
+
+        let got = roothash_from_verity_partition(&part).unwrap();
+
+        let mut h = Sha256::new();
+        h.update(salt);
+        h.update(root_block);
+        assert_eq!(got, hex::encode(h.finalize()));
+    }
+
+    #[test]
+    fn roothash_rejects_bad_magic() {
+        let mut part = synthetic_verity_partition(&[0u8; 32], &[0u8; 4096]);
+        part[0] = b'X';
+        assert!(roothash_from_verity_partition(&part).is_err());
+    }
+
+    /// Minimal GPT (512-byte LBA): protective space + header @ LBA1 + one
+    /// partition entry pointing at a verity partition placed at `verity_lba`.
+    fn synthetic_disk(verity_lba: u64, verity_bytes: &[u8]) -> Vec<u8> {
+        let entries_lba = 2u64;
+        let part_lba = verity_lba;
+        let total = (part_lba as usize + verity_bytes.len().div_ceil(512) + 1) * 512;
+        let mut disk = vec![0u8; total.max(part_lba as usize * 512 + verity_bytes.len())];
+
+        // GPT header @ LBA1
+        let h = 512;
+        disk[h..h + 8].copy_from_slice(b"EFI PART");
+        disk[h + 72..h + 80].copy_from_slice(&entries_lba.to_le_bytes()); // PartitionEntryLBA
+        disk[h + 80..h + 84].copy_from_slice(&1u32.to_le_bytes()); // NumberOfPartitionEntries
+        disk[h + 84..h + 88].copy_from_slice(&128u32.to_le_bytes()); // SizeOfPartitionEntry
+
+        // one entry @ entries_lba
+        let e = entries_lba as usize * 512;
+        disk[e..e + 16].copy_from_slice(&VERITY_TYPE_GUID); // PartitionTypeGUID
+        disk[e + 32..e + 40].copy_from_slice(&part_lba.to_le_bytes()); // StartingLBA
+        let end_lba = part_lba + verity_bytes.len().div_ceil(512) as u64 - 1;
+        disk[e + 40..e + 48].copy_from_slice(&end_lba.to_le_bytes()); // EndingLBA
+
+        // verity partition bytes
+        let p = part_lba as usize * 512;
+        disk[p..p + verity_bytes.len()].copy_from_slice(verity_bytes);
+        disk
+    }
+
+    #[test]
+    fn stored_roothash_finds_verity_partition() {
+        let salt = [0x22u8; 32];
+        let mut root_block = [0u8; 4096];
+        root_block[..5].copy_from_slice(b"hello");
+        let part = synthetic_verity_partition(&salt, &root_block);
+        let disk = synthetic_disk(40, &part);
+
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("disk.raw");
+        fs_err::write(&path, &disk).unwrap();
+
+        let got = stored_roothash(&path).unwrap();
+        let expected = roothash_from_verity_partition(&part).unwrap();
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    #[ignore = "requires local steep build at /home/ubuntu/steep/output/base"]
+    fn stored_roothash_from_real_disk() {
+        let got = stored_roothash(Path::new("/home/ubuntu/steep/output/base/disk.raw")).unwrap();
+        assert_eq!(
+            got,
+            "695be9124b1f2043c8ea1e248a98792cf003002b95610061d5b27de0c77ea741"
+        );
+    }
+}

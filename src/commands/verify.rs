@@ -188,11 +188,11 @@ fn verify_igvm_measurement(
         Ok(b) => b,
         Err(e) => return Verification::failure("Could not read IGVM file", &e.to_string()),
     };
-    let igvm = match igvm::IgvmFile::new_from_binary(&bytes, None) {
+    let igvm_file = match igvm::IgvmFile::new_from_binary(&bytes, None) {
         Ok(f) => f,
         Err(e) => return Verification::failure("Could not parse IGVM file", &e.to_string()),
     };
-    let measured = match igvm_tools::measure::measure_snp(&igvm, false) {
+    let measured = match igvm_tools::measure::measure_snp(&igvm_file, false) {
         Ok(r) => hex::encode(r.launch_digest),
         Err(e) => return Verification::failure("Could not measure IGVM file", &e),
     };
@@ -564,7 +564,7 @@ mod tests {
 
     #[test]
     fn igvm_measurement_match() {
-        let digest = "ab".repeat(48); // 48-byte SHA-384, hex
+        let digest = "ab".repeat(48); // 96-char hex of a 48-byte (SHA-384) digest
         match compare_launch_digest(&digest, &digest.to_uppercase()) {
             Verification::Success { message } => assert!(message.contains("launch measurement")),
             Verification::Failure { message, .. } => panic!("expected success: {message}"),

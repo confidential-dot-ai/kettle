@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -81,7 +81,12 @@ async fn run_build(job: Arc<ServerJob>, req: BuildRequest) -> Result<()> {
         // Build success — produce tarball.
         let kettle_build = project_dir.join("kettle-build");
         anyhow::ensure!(kettle_build.is_dir(), "build did not produce kettle-build/");
-        let tarball = tar_dir(&kettle_build)?;
+        // Nest the build output under a directory named after the project that
+        // was built and attested, so the downloaded tarball unpacks into its own
+        // directory rather than scattering files into the current directory.
+        let top_level =
+            output_top_level(&project_dir, &work_dir_path, req.source_name.as_deref());
+        let tarball = tar_dir(&kettle_build, &top_level)?;
         job.result.set(tarball).map_err(|_| anyhow::anyhow!("result already set"))?;
         Ok(())
     }.await;
@@ -155,13 +160,117 @@ fn find_project_dir(work_dir: &PathBuf) -> Result<PathBuf> {
     Ok(work_dir.clone())
 }
 
-fn tar_dir(dir: &PathBuf) -> Result<tempfile::TempPath> {
+/// Choose the directory name to nest the build output under inside the tarball.
+///
+/// When the source had a single top-level directory, `find_project_dir` descends
+/// into it, so `project_dir` differs from `work_dir` and we use that directory's
+/// name (e.g. the repo or folder name). Otherwise the source unpacked loose into
+/// `work_dir`, so we fall back to the uploaded archive's name minus its
+/// extension, and finally to a generic name.
+fn output_top_level(project_dir: &Path, work_dir: &Path, source_name: Option<&str>) -> String {
+    if project_dir != work_dir {
+        if let Some(name) = project_dir.file_name().and_then(|n| n.to_str()) {
+            return name.to_string();
+        }
+    }
+    if let Some(name) = source_name {
+        let stem = strip_archive_extension(name);
+        if !stem.is_empty() {
+            return stem.to_string();
+        }
+    }
+    "kettle-build".to_string()
+}
+
+/// Strip a leading path and a trailing archive extension from a filename.
+fn strip_archive_extension(name: &str) -> &str {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    for ext in [".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz", ".tar", ".zip"] {
+        if let Some(stripped) = base.strip_suffix(ext) {
+            return stripped;
+        }
+    }
+    base
+}
+
+fn tar_dir(dir: &PathBuf, top_level: &str) -> Result<tempfile::TempPath> {
     let f = tempfile::NamedTempFile::new()?;
     {
         let enc = GzEncoder::new(f.as_file(), Compression::fast());
         let mut builder = tar::Builder::new(enc);
-        builder.append_dir_all(".", dir)?;
+        builder.append_dir_all(top_level, dir)?;
         builder.into_inner()?.finish()?;
     }
     Ok(f.into_temp_path())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn tar_dir_nests_contents_under_top_level_directory() {
+        let src = tempfile::tempdir().unwrap();
+        fs_err::write(src.path().join("evidence.json"), b"{}").unwrap();
+        fs_err::create_dir_all(src.path().join("artifacts")).unwrap();
+        fs_err::write(src.path().join("artifacts/dist.tar.gz"), b"x").unwrap();
+
+        let tarball = tar_dir(&src.path().to_path_buf(), "myproject").unwrap();
+
+        let gz = GzDecoder::new(fs_err::File::open(&tarball).unwrap());
+        let mut archive = tar::Archive::new(gz);
+        let paths: BTreeSet<String> = archive
+            .entries()
+            .unwrap()
+            .map(|e| e.unwrap().path().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert!(
+            paths.iter().all(|p| p == "myproject" || p.starts_with("myproject/")),
+            "every entry must live under myproject/, got {paths:?}"
+        );
+        assert!(
+            paths.contains("myproject/evidence.json"),
+            "evidence.json must be nested under the top-level dir, got {paths:?}"
+        );
+        assert!(
+            paths.contains("myproject/artifacts/dist.tar.gz"),
+            "nested artifacts must be preserved, got {paths:?}"
+        );
+    }
+
+    #[test]
+    fn output_top_level_prefers_single_top_level_directory() {
+        let work = PathBuf::from("/tmp/work");
+        let project = work.join("comp-graph");
+        // A single top-level dir was found: use its name, ignore the archive name.
+        assert_eq!(
+            output_top_level(&project, &work, Some("upload.zip")),
+            "comp-graph"
+        );
+    }
+
+    #[test]
+    fn output_top_level_falls_back_to_archive_name_without_extension() {
+        let work = PathBuf::from("/tmp/work");
+        // No single top-level dir: project_dir == work_dir, so use the archive name.
+        assert_eq!(
+            output_top_level(&work, &work, Some("my-project.tar.gz")),
+            "my-project"
+        );
+        assert_eq!(output_top_level(&work, &work, Some("foo.zip")), "foo");
+        assert_eq!(
+            output_top_level(&work, &work, Some("/downloads/bar.tgz")),
+            "bar"
+        );
+    }
+
+    #[test]
+    fn output_top_level_falls_back_to_generic_name() {
+        let work = PathBuf::from("/tmp/work");
+        assert_eq!(output_top_level(&work, &work, None), "kettle-build");
+        // An archive name that is nothing but an extension yields no usable stem.
+        assert_eq!(output_top_level(&work, &work, Some(".zip")), "kettle-build");
+    }
 }

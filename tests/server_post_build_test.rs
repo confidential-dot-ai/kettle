@@ -16,6 +16,7 @@ async fn post_build_returns_job_id() {
         repo_url: Some("https://github.com/x/y".into()),
         repo_ref: None,
         source_data: None,
+        source_name: None,
     };
     let body = serde_json::to_vec(&req).unwrap();
     let app = make_router();
@@ -41,6 +42,7 @@ async fn post_build_second_call_returns_409() {
         repo_url: Some("https://github.com/x/y".into()),
         repo_ref: None,
         source_data: None,
+        source_name: None,
     };
     let body = serde_json::to_vec(&req).unwrap();
     let app = make_router();

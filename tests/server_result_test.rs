@@ -18,6 +18,7 @@ async fn result_endpoint_streams_tarball_when_done() {
         repo_url: Some("https://x".into()),
         repo_ref: None,
         source_data: None,
+        source_name: None,
     })
     .unwrap();
     let post = app

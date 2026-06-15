@@ -45,6 +45,7 @@ async fn events_endpoint_streams_complete_event() {
         repo_url: Some("https://x".into()),
         repo_ref: None,
         source_data: None,
+        source_name: None,
     }).unwrap();
     let post = app
         .clone()
@@ -123,7 +124,7 @@ async fn events_endpoint_does_not_drop_event_between_snapshot_and_subscribe() {
 
     let body = serde_json::to_vec(&BuildRequest {
         nonce: "00".into(), repo_url: Some("https://x".into()),
-        repo_ref: None, source_data: None,
+        repo_ref: None, source_data: None, source_name: None,
     }).unwrap();
     // Use a clone for the POST so `app` is preserved for the events request.
     let post = app.clone().oneshot(Request::post("/build")

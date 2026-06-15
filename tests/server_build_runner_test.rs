@@ -18,6 +18,7 @@ async fn runner_emits_complete_failed_on_empty_dir_project() {
         repo_url: None,
         repo_ref: None,
         source_data: Some(tar_bytes),
+        source_name: None,
     };
 
     let id = registry.try_register_with_nonce(req.nonce.clone()).unwrap();
@@ -105,6 +106,7 @@ async fn runner_emits_build_event_during_pipeline() {
         repo_url: None,
         repo_ref: None,
         source_data: Some(tar_gz),
+        source_name: None,
     };
     let id = registry
         .try_register_with_nonce(req.nonce.clone())
@@ -169,6 +171,7 @@ async fn runner_streams_build_output_line_by_line() {
         nonce: "00".into(),
         repo_url: None, repo_ref: None,
         source_data: Some(tar_gz),
+        source_name: None,
     };
     let id = registry.try_register_with_nonce(req.nonce.clone()).unwrap();
     runner.spawn(registry.clone(), id.clone(), req);

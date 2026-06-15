@@ -9,6 +9,11 @@ pub struct BuildRequest {
     pub repo_ref: Option<String>,
     #[serde(default, with = "serde_with::As::<Option<serde_with::base64::Base64>>")]
     pub source_data: Option<Vec<u8>>,
+    /// Original filename of an uploaded `source_data` archive, if known. Used to
+    /// name the output directory when the archive has no single top-level
+    /// directory of its own.
+    #[serde(default)]
+    pub source_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

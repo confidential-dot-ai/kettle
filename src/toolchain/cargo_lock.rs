@@ -905,7 +905,7 @@ source = "git+https://github.com/virtee/sev#900d42d6a1f9102ed52faa3a3889b54e8a7e
             r#"
 name = "attestation"
 version = "0.4.0"
-source = "git+https://github.com/lunal-dev/attestation-rs?branch=usize#952489ea39cbb300828af5c1268eff3387cfe4b5"
+source = "git+https://github.com/confidential-dot-ai/attestation-rs?branch=usize#952489ea39cbb300828af5c1268eff3387cfe4b5"
 "#,
         );
         let empty: HashMap<String, PathBuf> = HashMap::new();
@@ -914,7 +914,7 @@ source = "git+https://github.com/lunal-dev/attestation-rs?branch=usize#952489ea3
             .unwrap();
         assert_eq!(
             dep.uri,
-            "pkg:cargo/attestation@0.4.0?vcs_url=git+https://github.com/lunal-dev/attestation-rs%3Fbranch=usize@952489ea39cbb300828af5c1268eff3387cfe4b5"
+            "pkg:cargo/attestation@0.4.0?vcs_url=git+https://github.com/confidential-dot-ai/attestation-rs%3Fbranch=usize@952489ea39cbb300828af5c1268eff3387cfe4b5"
         );
         match dep.digest {
             Digest::GitCommit { git_commit } => {

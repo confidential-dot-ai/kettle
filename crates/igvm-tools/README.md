@@ -17,7 +17,7 @@ Other VMMs (cloud-hypervisor, Firecracker, Hyper-V) process IGVM directives diff
 ## Install
 
 ```bash
-git clone https://github.com/lunal-dev/igvm-tools.git
+git clone https://github.com/confidential-dot-ai/igvm-tools.git
 cargo install --path .
 ```
 
@@ -28,7 +28,7 @@ igvm-tools requires a patched OVMF firmware with IGVM metadata support (paramete
 Use our patched edk2 fork:
 
 ```bash
-git clone https://github.com/lunal-dev/edk2.git
+git clone https://github.com/confidential-dot-ai/edk2.git
 cd edk2
 git checkout OvmfPkg-PlatformPei-skip-pvalidate-igvm-pages
 git submodule update --init

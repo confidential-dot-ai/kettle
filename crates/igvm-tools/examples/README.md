@@ -21,7 +21,7 @@ cargo build --release
 
 ### `OVMF.fd` (4 MB)
 
-Patched OVMF firmware built from our [edk2 fork](https://github.com/lunal-dev/edk2)
+Patched OVMF firmware built from our [edk2 fork](https://github.com/confidential-dot-ai/edk2)
 
 The patch adds IGVM-aware PVALIDATE handling — when booting via IGVM, pages loaded through `SNP_LAUNCH_UPDATE` are already validated by the PSP. Without the patch, OVMF re-validates these pages and the guest silently terminates.
 
@@ -31,7 +31,7 @@ The patch adds IGVM-aware PVALIDATE handling — when booting via IGVM, pages lo
 # Prerequisites (Ubuntu/Debian)
 sudo apt install build-essential nasm iasl uuid-dev python3
 
-git clone https://github.com/lunal-dev/edk2.git
+git clone https://github.com/confidential-dot-ai/edk2.git
 cd edk2
 git checkout OvmfPkg-PlatformPei-skip-pvalidate-igvm-pages
 git submodule update --init    # ~2 GB, takes 5-10 min

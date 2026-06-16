@@ -7,6 +7,7 @@ use tracing::debug;
 
 use crate::provenance::{InternalParameters, ResolvedDependency};
 
+#[cfg(feature = "cli")]
 shadow_rs::shadow!(binary);
 
 // --- Moved from toolchain.rs ---
@@ -175,7 +176,10 @@ impl ToolBinaryInfo {
     }
 
     pub(crate) fn kettle_info() -> Result<Self> {
+        #[cfg(feature = "cli")]
         let version = binary::PKG_VERSION.to_string();
+        #[cfg(not(feature = "cli"))]
+        let version = env!("CARGO_PKG_VERSION").to_string();
         let bin = std::env::current_exe().context("locating current kettle binary")?;
         let sha256 = hex::encode(Sha256::digest(fs_err::read(&bin)?));
         Ok(Self { version, sha256 })

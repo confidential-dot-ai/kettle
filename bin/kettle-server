@@ -14,7 +14,7 @@ fi
 
 if [[ "${AZURE_SECURITY_TYPE:-}" == "ConfidentialVM" ]]; then
   set -x
-  cargo run --bin kettle-server --features attest,server -- "$@"
+  cargo run --bin kettle-server --features cli,attest,server -- "$@"
 else
-  cargo run --bin kettle-server --features server -- "$@"
+  cargo run --bin kettle-server --features cli,server -- "$@"
 fi

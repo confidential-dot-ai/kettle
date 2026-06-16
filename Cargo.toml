@@ -6,6 +6,9 @@ repository = "https://github.com/lunal-dev/kettle"
 build = "build.rs"
 
 [features]
+# Enables shadow-rs build metadata used by the CLI binary. Off by default so
+# library consumers skip the shadow build step; the bin/ scripts pass it explicitly.
+cli = []
 attest = ["attestation/attest"]
 server = ["dep:axum", "dep:tar", "dep:zip", "dep:dashmap", "dep:tempfile", "dep:tokio-stream", "dep:futures-util", "dep:tokio-util"]
 

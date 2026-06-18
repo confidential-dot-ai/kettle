@@ -148,7 +148,7 @@ EOF
       --smp 10 --memory 20G \
       --extra $REPO_ROOT/target/steep/mkosi.extra \
       --cloud-init $REPO_ROOT/target/steep/user-data.yml \
-      --package git,curl,ca-certificates,build-essential,cargo,tpm2-tss,passwd \
+      --package git,curl,ca-certificates,build-essential,cargo,tpm2-tss,passwd,pkg-config \
       --script $REPO_ROOT/target/steep/install-nix.sh.chroot \
 )
 

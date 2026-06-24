@@ -71,40 +71,90 @@ impl Provenance {
         }
     }
 
-    pub fn verify_artifacts(&self, artifacts: &[DirEntry]) -> Result<Vec<Verification>> {
-        artifacts
-            .iter()
-            .map(|entry| {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                let checksum = Sha256::digest(fs_err::read(entry.path())?);
-                let subject = self.subject.iter().find(|s| s.name == name);
-                if let Some(subject) = subject {
-                    if hex::encode(checksum) == subject.digest.value() {
-                        Ok(Verification::success(&format!(
-                            "Checksum match for binary `{}`",
-                            name
-                        )))
-                    } else {
-                        Ok(Verification::failure(
-                            "Checksum mismatch for `{}`!",
-                            &format!(
-                                "Provenance did not contain checksum for binary named {:?}",
-                                name
-                            ),
-                        ))
-                    }
-                } else {
-                    Ok(Verification::failure(
-                        &format!("Checksum missing for `{}`!", name),
-                        &format!(
-                            "Provenance did not contain checksum for binary named {:?}",
-                            name
-                        ),
-                    ))
-                }
-            })
-            .collect()
+    pub fn verify_artifacts(
+        &self,
+        top_level: &[DirEntry],
+        artifacts: &[DirEntry],
+    ) -> Result<ArtifactReport> {
+        let mut results = Vec::new();
+        let mut warnings = Vec::new();
+
+        for subject in &self.subject {
+            let mut found = false;
+
+            // A subject's binary may live beside provenance.json, in artifacts/,
+            // or both. Verify and report every copy separately.
+            for entry in top_level
+                .iter()
+                .filter(|e| e.file_name().to_string_lossy() == subject.name)
+            {
+                found = true;
+                results.push(self.check_artifact(subject, entry, &subject.name)?);
+            }
+            for entry in artifacts
+                .iter()
+                .filter(|e| e.file_name().to_string_lossy() == subject.name)
+            {
+                found = true;
+                let display = format!("artifacts/{}", subject.name);
+                results.push(self.check_artifact(subject, entry, &display)?);
+            }
+
+            if !found {
+                results.push(Verification::failure(
+                    &format!("Artifact missing for `{}`!", subject.name),
+                    &format!(
+                        "Provenance lists `{}` as a subject but no matching file was found in the build directory or artifacts/",
+                        subject.name
+                    ),
+                ));
+            }
+        }
+
+        // Files in artifacts/ that provenance does not list are surfaced as
+        // warnings, not failures. Unlisted files in the build-dir root (e.g.
+        // provenance.json, evidence.json) are ignored silently.
+        for entry in artifacts {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !self.subject.iter().any(|s| s.name == name) {
+                warnings.push(format!("artifacts/{name} is not listed in provenance.json"));
+            }
+        }
+
+        Ok(ArtifactReport { results, warnings })
     }
+
+    /// Hash `entry` and compare it to the subject's recorded digest. `display`
+    /// is the name shown in the result message (bare for root files,
+    /// `artifacts/<name>` for files under artifacts/).
+    fn check_artifact(
+        &self,
+        subject: &Subject,
+        entry: &DirEntry,
+        display: &str,
+    ) -> Result<Verification> {
+        // Subjects are assumed to record sha256 digests; a sha512 subject would
+        // compare a sha256 hex string against a sha512 one and always mismatch.
+        let checksum = hex::encode(Sha256::digest(fs_err::read(entry.path())?));
+        let expected = subject.digest.value();
+        if checksum == expected {
+            Ok(Verification::success(&format!(
+                "Checksum match for binary `{display}`"
+            )))
+        } else {
+            Ok(Verification::failure(
+                &format!("Checksum mismatch for `{display}`!"),
+                &format!("Expected checksum {expected}\nActual checksum   {checksum}"),
+            ))
+        }
+    }
+}
+
+/// Outcome of verifying the artifacts a build claims. `results` drive the
+/// PASSED/FAILED verdict; `warnings` are informational and never fail the run.
+pub struct ArtifactReport {
+    pub results: Vec<Verification>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -531,380 +581,198 @@ mod tests {
         fs_err::write(dir.join(name), content).unwrap();
     }
 
+    /// Collect a directory's entries as a Vec<DirEntry>, like Build::from_dir.
+    fn entries(dir: &std::path::Path) -> Vec<fs_err::DirEntry> {
+        fs_err::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .collect()
+    }
+
+    /// A valid Provenance (parsed from the real cargo fixture) with its subject
+    /// list swapped for the given one — far less noise than rebuilding the
+    /// whole struct in every test.
+    fn provenance_with_subjects(subjects: Vec<Subject>) -> Provenance {
+        let mut p = Provenance::from_json(CARGO_FIXTURE).unwrap();
+        p.subject = subjects;
+        p
+    }
+
+    /// A subject whose sha256 digest matches `content`.
+    fn sha256_subject(name: &str, content: &[u8]) -> Subject {
+        Subject {
+            name: name.to_string(),
+            digest: Digest::Sha256 {
+                sha256: hex::encode(Sha256::digest(content)),
+            },
+        }
+    }
+
     #[test]
-    fn verify_artifacts_checksum_match() {
+    fn verify_artifacts_subject_at_root() {
         let tmp = TempDir::new().unwrap();
         let content = b"hello binary";
-        let checksum = hex::encode(Sha256::digest(content));
         write_file_to_dir(tmp.path(), "rg", content);
 
-        let p = Provenance {
-            _type: String::new(),
-            predicate_type: String::new(),
-            predicate: Predicate {
-                build_definition: BuildDefiniton {
-                    build_type: String::new(),
-                    external_parameters: ExternalParameters {
-                        build_command: String::new(),
-                        source: Source {
-                            digest: SourceDigest {
-                                git_commit: String::new(),
-                                git_tree: String::new(),
-                            },
-                            uri: String::new(),
-                        },
-                    },
-                    internal_parameters: InternalParameters {
-                        evaluation: None,
-                        flake_inputs: None,
-                        lockfile_hash: Digest::Sha256 {
-                            sha256: String::new(),
-                        },
-                        toolchain: Toolchain::RustToolchain {
-                            rustc: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                            cargo: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                            kettle: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                        },
-                    },
-                    resolved_dependencies: vec![],
-                },
-                run_details: RunDetails {
-                    builder: Builder { id: String::new() },
-                    byproducts: vec![],
-                    metadata: Metadata {
-                        invocation_id: String::new(),
-                        started_on: String::new(),
-                        finished_on: None,
-                    },
-                },
-            },
-            subject: vec![Subject {
-                name: "rg".to_string(),
-                digest: Digest::Sha256 { sha256: checksum },
-            }],
-        };
+        let p = provenance_with_subjects(vec![sha256_subject("rg", content)]);
+        let report = p.verify_artifacts(&entries(tmp.path()), &[]).unwrap();
 
-        let entries: Vec<fs_err::DirEntry> = fs_err::read_dir(tmp.path())
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .collect();
-        let results = p.verify_artifacts(&entries).unwrap();
-        assert_eq!(results.len(), 1);
-        match &results[0] {
+        assert_eq!(report.results.len(), 1);
+        match &report.results[0] {
+            Verification::Success { message } => assert!(message.contains("rg")),
+            Verification::Failure { message, .. } => panic!("expected success: {message}"),
+        }
+        assert!(report.warnings.is_empty());
+    }
+
+    #[test]
+    fn verify_artifacts_subject_in_artifacts_dir() {
+        let tmp = TempDir::new().unwrap();
+        let content = b"hello binary";
+        write_file_to_dir(tmp.path(), "rg", content);
+
+        let p = provenance_with_subjects(vec![sha256_subject("rg", content)]);
+        let report = p.verify_artifacts(&[], &entries(tmp.path())).unwrap();
+
+        assert_eq!(report.results.len(), 1);
+        match &report.results[0] {
             Verification::Success { message } => {
-                assert!(message.contains("rg"));
+                assert!(message.contains("artifacts/rg"), "message: {message}");
             }
-            Verification::Failure { message, .. } => panic!("expected success, got: {message}"),
+            Verification::Failure { message, .. } => panic!("expected success: {message}"),
         }
     }
 
     #[test]
-    fn verify_artifacts_checksum_mismatch() {
+    fn verify_artifacts_subject_in_both_locations_reports_each() {
+        let root = TempDir::new().unwrap();
+        let arts = TempDir::new().unwrap();
+        let content = b"hello binary";
+        write_file_to_dir(root.path(), "rg", content);
+        write_file_to_dir(arts.path(), "rg", content);
+
+        let p = provenance_with_subjects(vec![sha256_subject("rg", content)]);
+        let report = p
+            .verify_artifacts(&entries(root.path()), &entries(arts.path()))
+            .unwrap();
+
+        assert_eq!(report.results.len(), 2);
+        assert!(
+            report
+                .results
+                .iter()
+                .all(|r| matches!(r, Verification::Success { .. })),
+            "both copies should verify"
+        );
+    }
+
+    #[test]
+    fn verify_artifacts_checksum_mismatch_shows_expected_and_actual() {
         let tmp = TempDir::new().unwrap();
-        write_file_to_dir(tmp.path(), "rg", b"hello binary");
+        write_file_to_dir(tmp.path(), "rg", b"actual contents");
 
-        let p = Provenance {
-            _type: String::new(),
-            predicate_type: String::new(),
-            predicate: Predicate {
-                build_definition: BuildDefiniton {
-                    build_type: String::new(),
-                    external_parameters: ExternalParameters {
-                        build_command: String::new(),
-                        source: Source {
-                            digest: SourceDigest {
-                                git_commit: String::new(),
-                                git_tree: String::new(),
-                            },
-                            uri: String::new(),
-                        },
-                    },
-                    internal_parameters: InternalParameters {
-                        evaluation: None,
-                        flake_inputs: None,
-                        lockfile_hash: Digest::Sha256 {
-                            sha256: String::new(),
-                        },
-                        toolchain: Toolchain::RustToolchain {
-                            rustc: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                            cargo: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                            kettle: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                        },
-                    },
-                    resolved_dependencies: vec![],
-                },
-                run_details: RunDetails {
-                    builder: Builder { id: String::new() },
-                    byproducts: vec![],
-                    metadata: Metadata {
-                        invocation_id: String::new(),
-                        started_on: String::new(),
-                        finished_on: None,
-                    },
-                },
-            },
-            subject: vec![Subject {
-                name: "rg".to_string(),
-                digest: Digest::Sha256 {
-                    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
-                        .to_string(),
-                },
-            }],
-        };
+        let p = provenance_with_subjects(vec![sha256_subject("rg", b"different contents")]);
+        let report = p.verify_artifacts(&entries(tmp.path()), &[]).unwrap();
 
-        let entries: Vec<fs_err::DirEntry> = fs_err::read_dir(tmp.path())
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .collect();
-        let results = p.verify_artifacts(&entries).unwrap();
-        assert_eq!(results.len(), 1);
-        match &results[0] {
-            Verification::Failure { .. } => {}
+        assert_eq!(report.results.len(), 1);
+        match &report.results[0] {
+            Verification::Failure { message, details } => {
+                assert!(message.contains("mismatch"), "message: {message}");
+                let expected = hex::encode(Sha256::digest(b"different contents"));
+                let actual = hex::encode(Sha256::digest(b"actual contents"));
+                assert!(
+                    details.contains(&expected) && details.contains(&actual),
+                    "details should show both checksums: {details}"
+                );
+            }
             Verification::Success { .. } => panic!("expected failure"),
         }
     }
 
     #[test]
-    fn verify_artifacts_missing_from_subjects() {
+    fn verify_artifacts_mismatch_in_artifacts_dir_shows_prefixed_name() {
         let tmp = TempDir::new().unwrap();
-        write_file_to_dir(tmp.path(), "unknown-binary", b"data");
+        write_file_to_dir(tmp.path(), "rg", b"actual contents");
 
-        let p = Provenance {
-            _type: String::new(),
-            predicate_type: String::new(),
-            predicate: Predicate {
-                build_definition: BuildDefiniton {
-                    build_type: String::new(),
-                    external_parameters: ExternalParameters {
-                        build_command: String::new(),
-                        source: Source {
-                            digest: SourceDigest {
-                                git_commit: String::new(),
-                                git_tree: String::new(),
-                            },
-                            uri: String::new(),
-                        },
-                    },
-                    internal_parameters: InternalParameters {
-                        evaluation: None,
-                        flake_inputs: None,
-                        lockfile_hash: Digest::Sha256 {
-                            sha256: String::new(),
-                        },
-                        toolchain: Toolchain::RustToolchain {
-                            rustc: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                            cargo: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                            kettle: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                        },
-                    },
-                    resolved_dependencies: vec![],
-                },
-                run_details: RunDetails {
-                    builder: Builder { id: String::new() },
-                    byproducts: vec![],
-                    metadata: Metadata {
-                        invocation_id: String::new(),
-                        started_on: String::new(),
-                        finished_on: None,
-                    },
-                },
-            },
-            subject: vec![], // No subjects
-        };
+        let p = provenance_with_subjects(vec![sha256_subject("rg", b"different contents")]);
+        let report = p.verify_artifacts(&[], &entries(tmp.path())).unwrap();
 
-        let entries: Vec<fs_err::DirEntry> = fs_err::read_dir(tmp.path())
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .collect();
-        let results = p.verify_artifacts(&entries).unwrap();
-        assert_eq!(results.len(), 1);
-        match &results[0] {
+        assert_eq!(report.results.len(), 1);
+        match &report.results[0] {
             Verification::Failure { message, .. } => {
-                assert!(message.contains("Checksum missing"));
+                assert!(
+                    message.contains("artifacts/rg"),
+                    "mismatch message should carry the artifacts/ prefix: {message}"
+                );
             }
             Verification::Success { .. } => panic!("expected failure"),
         }
     }
 
     #[test]
-    fn verify_artifacts_empty_slice() {
-        let p = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        let results = p.verify_artifacts(&[]).unwrap();
-        assert!(results.is_empty());
+    fn verify_artifacts_subject_missing_from_disk_fails() {
+        let p = provenance_with_subjects(vec![sha256_subject("rg", b"x")]);
+        let report = p.verify_artifacts(&[], &[]).unwrap();
+
+        assert_eq!(report.results.len(), 1);
+        match &report.results[0] {
+            Verification::Failure { message, .. } => {
+                assert!(message.contains("missing"), "message: {message}");
+            }
+            Verification::Success { .. } => panic!("expected failure"),
+        }
     }
 
     #[test]
-    fn verify_artifacts_multiple() {
+    fn verify_artifacts_unlisted_file_in_artifacts_warns_without_failing() {
         let tmp = TempDir::new().unwrap();
-        let content_a = b"binary a";
-        let checksum_a = hex::encode(Sha256::digest(content_a));
-        let content_b = b"binary b";
-        write_file_to_dir(tmp.path(), "a", content_a);
-        write_file_to_dir(tmp.path(), "b", content_b);
-        write_file_to_dir(tmp.path(), "c", b"binary c");
+        write_file_to_dir(tmp.path(), "stray", b"data");
 
-        let p = Provenance {
-            _type: String::new(),
-            predicate_type: String::new(),
-            predicate: Predicate {
-                build_definition: BuildDefiniton {
-                    build_type: String::new(),
-                    external_parameters: ExternalParameters {
-                        build_command: String::new(),
-                        source: Source {
-                            digest: SourceDigest {
-                                git_commit: String::new(),
-                                git_tree: String::new(),
-                            },
-                            uri: String::new(),
-                        },
-                    },
-                    internal_parameters: InternalParameters {
-                        evaluation: None,
-                        flake_inputs: None,
-                        lockfile_hash: Digest::Sha256 {
-                            sha256: String::new(),
-                        },
-                        toolchain: Toolchain::RustToolchain {
-                            rustc: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                            cargo: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                            kettle: ToolchainVersion {
-                                version: String::new(),
-                                digest: Digest::Sha256 {
-                                    sha256: String::new(),
-                                },
-                            },
-                        },
-                    },
-                    resolved_dependencies: vec![],
-                },
-                run_details: RunDetails {
-                    builder: Builder { id: String::new() },
-                    byproducts: vec![],
-                    metadata: Metadata {
-                        invocation_id: String::new(),
-                        started_on: String::new(),
-                        finished_on: None,
-                    },
-                },
-            },
-            subject: vec![
-                Subject {
-                    name: "a".to_string(),
-                    digest: Digest::Sha256 {
-                        sha256: checksum_a, // match
-                    },
-                },
-                Subject {
-                    name: "b".to_string(),
-                    digest: Digest::Sha256 {
-                        sha256: "bad_checksum".to_string(), // mismatch
-                    },
-                },
-                // "c" is not in subjects at all
-            ],
-        };
+        let p = provenance_with_subjects(vec![]);
+        let report = p.verify_artifacts(&[], &entries(tmp.path())).unwrap();
 
-        let mut entries: Vec<fs_err::DirEntry> = fs_err::read_dir(tmp.path())
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .collect();
-        entries.sort_by_key(|e| e.file_name());
-        let results = p.verify_artifacts(&entries).unwrap();
-        assert_eq!(results.len(), 3);
+        assert!(report.results.is_empty(), "no subjects => no results");
+        assert_eq!(report.warnings.len(), 1);
+        assert!(
+            report.warnings[0].contains("artifacts/stray"),
+            "warning: {}",
+            report.warnings[0]
+        );
+    }
 
-        // Check each result
-        let mut saw_success = false;
-        let mut saw_mismatch = false;
-        let mut saw_missing = false;
-        for r in &results {
-            match r {
-                Verification::Success { message } if message.contains("a") => saw_success = true,
-                Verification::Failure { message, .. } if message.contains("mismatch") => {
-                    saw_mismatch = true
-                }
-                Verification::Failure { message, .. } if message.contains("missing") => {
-                    saw_missing = true
-                }
-                _ => {}
-            }
-        }
-        assert!(saw_success, "expected a success for file 'a'");
-        // b has a subject but wrong checksum → mismatch
-        assert!(saw_mismatch, "expected a mismatch for file 'b'");
-        // c has no subject → missing
-        assert!(saw_missing, "expected a missing for file 'c'");
+    #[test]
+    fn verify_artifacts_unlisted_file_at_root_is_silent() {
+        // Root files are silent (unlike artifacts/ files, which warn) because
+        // provenance.json and evidence.json themselves live at the root and are
+        // not subjects.
+        let tmp = TempDir::new().unwrap();
+        write_file_to_dir(tmp.path(), "README", b"data");
+
+        let p = provenance_with_subjects(vec![]);
+        let report = p.verify_artifacts(&entries(tmp.path()), &[]).unwrap();
+
+        assert!(report.results.is_empty());
+        assert!(report.warnings.is_empty(), "root files must not warn");
     }
 
     #[test]
     fn verify_artifacts_io_error_deleted_file() {
         let tmp = TempDir::new().unwrap();
         write_file_to_dir(tmp.path(), "rg", b"content");
-        let entries: Vec<fs_err::DirEntry> = fs_err::read_dir(tmp.path())
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .collect();
-        // Delete the file after getting the DirEntry
+        let ents = entries(tmp.path());
+        // Delete the file after capturing the DirEntry.
         fs_err::remove_file(tmp.path().join("rg")).unwrap();
 
-        let p = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        let result = p.verify_artifacts(&entries);
-        assert!(result.is_err(), "expected Err for deleted file");
+        let p = provenance_with_subjects(vec![sha256_subject("rg", b"content")]);
+        assert!(p.verify_artifacts(&ents, &[]).is_err());
+    }
+
+    #[test]
+    fn verify_artifacts_empty() {
+        let p = provenance_with_subjects(vec![]);
+        let report = p.verify_artifacts(&[], &[]).unwrap();
+        assert!(report.results.is_empty());
+        assert!(report.warnings.is_empty());
     }
 
     // --- Accessor methods ---

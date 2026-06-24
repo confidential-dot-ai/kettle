@@ -36,7 +36,8 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     results.push(verify_signature(&verification));
     results.push(provenance.verify_predicate());
     results.push(verify_provenance(&verification, &provenance));
-    results.extend(provenance.verify_artifacts(&build.artifacts)?);
+    let artifact_report = provenance.verify_artifacts(&build.top_level, &build.artifacts)?;
+    results.extend(artifact_report.results);
     if let Some(nonce) = nonce {
         results.push(verify_nonce(&verification, nonce));
     }
@@ -94,6 +95,11 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     let headers = vec![format!("{}", "Verification Results".bold())];
     let footers = vec![];
     print_table(headers, rows, footers);
+
+    // Warnings are informational and do not affect the PASSED/FAILED verdict.
+    for warning in &artifact_report.warnings {
+        eprintln!("{}", format!("⚠️  {warning}").yellow());
+    }
 
     // Print detailed information about failures (if any)
     for r in results {

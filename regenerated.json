@@ -1,0 +1,93 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "predicate": {
+    "buildDefinition": {
+      "buildType": "https://lunal.dev/kettle/pnpm@v1",
+      "externalParameters": {
+        "buildCommand": "pnpm build",
+        "source": {
+          "digest": {
+            "gitCommit": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            "gitTree": "f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5"
+          },
+          "uri": "https://github.com/example/openclaw.git"
+        }
+      },
+      "internalParameters": {
+        "lockfileHash": {
+          "sha256": "c0ffee00deadbeef1234567890abcdef1234567890abcdef1234567890abcdef"
+        },
+        "toolchain": {
+          "pnpm": {
+            "digest": {
+              "sha256": "def456def456def456def456def456def456def456def456def456def456def4"
+            },
+            "version": "8.15.4"
+          },
+          "node": {
+            "digest": {
+              "sha256": "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1"
+            },
+            "version": "v18.12.0"
+          },
+          "kettle": {
+            "digest": {
+              "sha256": "be54407b39e0d0680fafbc0f6eeac1cc0b91292589e1284ae307f950652bccad"
+            },
+            "version": "kettle 0.1.0"
+          }
+        }
+      },
+      "resolvedDependencies": [
+        {
+          "digest": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "name": "@types/node",
+          "uri": "pkg:npm/%40types/node@20.11.5"
+        },
+        {
+          "digest": {
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "name": "semver",
+          "uri": "pkg:npm/semver@7.6.0"
+        },
+        {
+          "digest": {
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "name": "typescript",
+          "uri": "pkg:npm/typescript@5.4.3"
+        }
+      ]
+    },
+    "runDetails": {
+      "builder": {
+        "id": "https://lunal.dev/kettle-tee/v1"
+      },
+      "byproducts": [
+        {
+          "digest": {
+            "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          },
+          "name": "input_merkle_root"
+        }
+      ],
+      "metadata": {
+        "invocationId": "build-20260316-120000-openclaw1",
+        "startedOn": "2026-03-16T12:00:00.000000+00:00",
+        "finishedOn": "2026-03-16T12:01:00.000000+00:00"
+      }
+    }
+  },
+  "predicateType": "https://slsa.dev/provenance/v1",
+  "subject": [
+    {
+      "digest": {
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "name": "dist.tar.gz"
+    }
+  ]
+}

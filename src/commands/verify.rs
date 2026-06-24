@@ -63,7 +63,7 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
         vec![format!(
             "\n{} {}\n",
             "Verifying build dir".bold(),
-            &path.file_name().unwrap().to_string_lossy()
+            build_dir_name(&path)
         )],
         vec![
             vec!["Build ID".bold().to_string(), provenance.build_id().clone()],
@@ -125,6 +125,17 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     info!("{}\n{:?}", "Attestation claims".bold(), &verification);
 
     Ok(())
+}
+
+/// Best-effort human-readable name for the build directory being verified.
+/// `Path::file_name` returns `None` for paths ending in `.`/`..` or the root
+/// (e.g. `kettle verify .`), so canonicalize first to recover the real
+/// directory name, falling back to the path as given.
+fn build_dir_name(path: &Path) -> String {
+    fs_err::canonicalize(path)
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
 fn verify_nonce(verification_result: &VerificationResult, nonce_string: String) -> Verification {
@@ -619,6 +630,35 @@ mod tests {
 
         let build = Build::from_dir(&tmp.path().to_path_buf()).unwrap();
         assert!(build.artifacts.is_empty());
+    }
+
+    // --- build_dir_name ---
+
+    #[test]
+    fn build_dir_name_for_dot_resolves_real_name() {
+        let tmp = TempDir::new().unwrap();
+        let nested = tmp.path().join("my-build");
+        fs_err::create_dir(&nested).unwrap();
+        // `.` has no `file_name()` component; this used to panic.
+        let prev = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&nested).unwrap();
+        let name = build_dir_name(Path::new("."));
+        std::env::set_current_dir(prev).unwrap();
+        assert_eq!(name, "my-build");
+    }
+
+    #[test]
+    fn build_dir_name_for_named_dir() {
+        let tmp = TempDir::new().unwrap();
+        let nested = tmp.path().join("trustee");
+        fs_err::create_dir(&nested).unwrap();
+        assert_eq!(build_dir_name(&nested), "trustee");
+    }
+
+    #[test]
+    fn build_dir_name_falls_back_for_nonexistent_path() {
+        // canonicalize fails, so we fall back to the path as given.
+        assert_eq!(build_dir_name(Path::new("does-not-exist")), "does-not-exist");
     }
 
     // --- verify_igvm_measurement (digest comparison) ---

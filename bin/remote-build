@@ -1,0 +1,101 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $# -ne 2 ]]; then
+    echo "USAGE: bin/remote-build REPO_URL REPO_REF" >&2
+    echo "" >&2
+    echo "  REPO_URL  git URL to clone (e.g. https://github.com/user/proj)" >&2
+    echo "  REPO_REF  branch, tag, or commit to check out" >&2
+    echo "" >&2
+    echo "  ORCHESTRATOR_URL  orchestrator base URL (default: http://127.0.0.1:8000)" >&2
+    exit 2
+fi
+
+REPO_URL="$1"
+REPO_REF="$2"
+ORCH="${ORCHESTRATOR_URL:-http://127.0.0.1:8000}"
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+WORK="$(mktemp -d -t remote-build.XXXXXX)"
+trap 'rm -rf "$WORK"' EXIT
+
+NONCE="$(openssl rand -hex 16)"
+
+echo "==> health check: $ORCH/health"
+HEALTH="$(curl -fsS --max-time 10 "$ORCH/health")"
+echo "    $HEALTH"
+
+echo "==> starting build: $REPO_URL @ $REPO_REF (nonce=$NONCE)"
+PAYLOAD="$(jq -cn \
+    --arg n "$NONCE" \
+    --arg u "$REPO_URL" \
+    --arg r "$REPO_REF" \
+    '{nonce:$n, repo_url:$u, repo_ref:$r}')"
+
+RESP="$(curl -fsS -X POST \
+    -H 'content-type: application/json' \
+    -d "$PAYLOAD" \
+    "$ORCH/build")"
+JOB_ID="$(echo "$RESP" | jq -r .job_id)"
+if [[ -z "$JOB_ID" || "$JOB_ID" == "null" ]]; then
+    echo "no job_id in response: $RESP" >&2
+    exit 1
+fi
+echo "    job_id=$JOB_ID"
+
+echo "==> streaming events: $ORCH/build/$JOB_ID/events"
+COMPLETE_JSON=""
+while IFS= read -r line; do
+    [[ "$line" == data:* ]] || continue
+    json="${line#data: }"
+    echo "$json" | jq -r '
+        if .type == "queued" then "    [queued] position=\(.position)"
+        elif .type == "complete" then "    [complete] \(.result | tojson)"
+        else "    [\(.type)] \(.msg)"
+        end'
+    if [[ "$(echo "$json" | jq -r .type)" == "complete" ]]; then
+        COMPLETE_JSON="$json"
+        break
+    fi
+done < <(curl -sN "$ORCH/build/$JOB_ID/events")
+
+if [[ -z "$COMPLETE_JSON" ]]; then
+    echo "event stream ended without a complete event" >&2
+    exit 1
+fi
+
+STATUS="$(echo "$COMPLETE_JSON" | jq -r .result.status)"
+if [[ "$STATUS" != "ok" ]]; then
+    ERR="$(echo "$COMPLETE_JSON" | jq -r '.result.error // "unknown"')"
+    ETYPE="$(echo "$COMPLETE_JSON" | jq -r '.result.error_type // "unknown"')"
+    echo "build failed: $ETYPE: $ERR" >&2
+    exit 1
+fi
+
+ARCHIVE="$WORK/result.tar.gz"
+echo "==> downloading result: $ORCH/build/$JOB_ID/result"
+curl -fsS --max-time 120 "$ORCH/build/$JOB_ID/result" -o "$ARCHIVE"
+echo "    $(wc -c <"$ARCHIVE") bytes -> $ARCHIVE"
+
+BUILD_DIR="$WORK/extract"
+mkdir -p "$BUILD_DIR"
+echo "==> extracting to $BUILD_DIR"
+tar xzf "$ARCHIVE" -C "$BUILD_DIR"
+
+if [[ ! -f "$BUILD_DIR/provenance.json" ]]; then
+    echo "no provenance.json in extracted archive; contents:" >&2
+    ls -la "$BUILD_DIR" >&2
+    exit 1
+fi
+
+if [[ ! -f "$BUILD_DIR/evidence.json" ]]; then
+    echo "no evidence.json in extracted archive — orchestrator/server was not built" >&2
+    echo "with --features attest (or not running on a TEE/CVM); skipping kettle verify." >&2
+    echo "Provenance is in $BUILD_DIR/provenance.json (will be removed on exit)." >&2
+    exit 1
+fi
+
+echo "==> verifying attestation: bin/kettle verify $BUILD_DIR --nonce $NONCE"
+bin/kettle verify "$BUILD_DIR" --nonce "$NONCE"

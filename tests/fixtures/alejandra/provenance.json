@@ -7,8 +7,8 @@
         "buildCommand": "nix build",
         "source": {
           "digest": {
-            "gitCommit": "8f47c5e82ee8e6e8adcc1748be0056a1e349f7e8",
-            "gitTree": "647d41dde6e70cd2557dcf27a1612361a722b9ae"
+            "gitCommit": "8c4a4a572bee519b04e9bb9207e7d993f55ecb4f",
+            "gitTree": "7aaedc5226212d37df9706a872387e584f22f4e6"
           },
           "uri": "https://github.com/kamadorueda/alejandra"
         }
@@ -16,7 +16,7 @@
       "internalParameters": {
         "evaluation": {
           "derivationCount": 2,
-          "fetchCount": 306
+          "fetchCount": 296
         },
         "flakeInputs": [
           {
@@ -38,15 +38,15 @@
         "toolchain": {
           "nix": {
             "digest": {
-              "sha256": "871f395cc1a0f753dfb5ae0d3e4ba27cb214b09536d918daf50949f5bcd1720c"
+              "sha256": "e85dccd78f7822ef7e1e0ba34727705d4f7a0d4bdb078671dad03f88c015282c"
             },
-            "version": "nix (Nix) 2.33.3"
+            "version": "nix (Nix) 2.34.7"
           },
           "kettle": {
             "digest": {
-              "sha256": "be54407b39e0d0680fafbc0f6eeac1cc0b91292589e1284ae307f950652bccad"
+              "sha256": "2e8e398fce4dfb04f1dad4555908b48c08909a3a2dcb026d8a82874556e942ff"
             },
-            "version": "kettle 0.1.0"
+            "version": "1.0.0"
           }
         }
       },
@@ -663,14 +663,14 @@
         },
         {
           "annotations": {
-            "drvPath": "f0frgz1nmcxmgvcysbccryiy1cqm36qv-crate-autocfg-1.4.0.tar.gz.drv",
+            "drvPath": "r5bd72livjkbxr0y0r8v939abn4sm29p-crate-autocfg-1.5.0.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "rOULrejmI0qhQNmi9VK77h2001P2m4IXvFA0kPwanyY="
+            "sha256": "wIYG+MPL9M5uyOKPsAFKLAhnCP6VTqqIU4SmFlFy5+g="
           },
-          "name": "crate-autocfg-1.4.0.tar.gz",
-          "uri": "pkg:nix-fetch/crate-autocfg-1.4.0.tar.gz?hash=sha256:rOULrejmI0qhQNmi9VK77h2001P2m4IXvFA0kPwanyY="
+          "name": "crate-autocfg-1.5.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-autocfg-1.5.0.tar.gz?hash=sha256:wIYG+MPL9M5uyOKPsAFKLAhnCP6VTqqIU4SmFlFy5+g="
         },
         {
           "annotations": {
@@ -685,25 +685,25 @@
         },
         {
           "annotations": {
-            "drvPath": "cw1xpgk52dnnm8h8krhqlx3vs311j2rq-crate-cc-1.2.18.tar.gz.drv",
+            "drvPath": "lar8hb2xwyzf9xn0v74zs56g0iyiqzq4-crate-cc-1.2.57.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "UlBGYX2DduPbHe/7B56RzvkKifw8pcGFu/jJ7N0VzVw="
+            "sha256": "eg3RyjhJMv82QchxigJ2nxaY51Y9xpdP/QM0YRYxBCM="
           },
-          "name": "crate-cc-1.2.18.tar.gz",
-          "uri": "pkg:nix-fetch/crate-cc-1.2.18.tar.gz?hash=sha256:UlBGYX2DduPbHe/7B56RzvkKifw8pcGFu/jJ7N0VzVw="
+          "name": "crate-cc-1.2.57.tar.gz",
+          "uri": "pkg:nix-fetch/crate-cc-1.2.57.tar.gz?hash=sha256:eg3RyjhJMv82QchxigJ2nxaY51Y9xpdP/QM0YRYxBCM="
         },
         {
           "annotations": {
-            "drvPath": "lpf73926gj61rz2x73aca9h06pnlvqdk-crate-cfg-if-1.0.0.tar.gz.drv",
+            "drvPath": "xfq328cyjbqa243hbsd7mi4myx849w9d-crate-cfg-if-1.0.4.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "uvHeQzl2FYi8Bhnjy8ASDuWC67dLU7Tvv3kRe9LaQP0="
+            "sha256": "kzD4sv8T80VAtE6UbvNREYJXJ7ONMyhu+YYUJhUSGAE="
           },
-          "name": "crate-cfg-if-1.0.0.tar.gz",
-          "uri": "pkg:nix-fetch/crate-cfg-if-1.0.0.tar.gz?hash=sha256:uvHeQzl2FYi8Bhnjy8ASDuWC67dLU7Tvv3kRe9LaQP0="
+          "name": "crate-cfg-if-1.0.4.tar.gz",
+          "uri": "pkg:nix-fetch/crate-cfg-if-1.0.4.tar.gz?hash=sha256:kzD4sv8T80VAtE6UbvNREYJXJ7ONMyhu+YYUJhUSGAE="
         },
         {
           "annotations": {
@@ -762,113 +762,113 @@
         },
         {
           "annotations": {
-            "drvPath": "9dd09bdbjyvanz7mhmbba3725vl4z01k-crate-equivalent-1.0.2.tar.gz.drv",
+            "drvPath": "jkszx3lr1azc3vrkrv6mbw6frhh2yi3i-crate-find-msvc-tools-0.1.9.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "h3pKzocTsLzypOfuyCUpwCnx0GGYhtGBRf6pbD/+XA8="
+            "sha256": "W668B3QVH5BaGizEGYkwCx5vuymv8M7/oQZP3TCI1YI="
           },
-          "name": "crate-equivalent-1.0.2.tar.gz",
-          "uri": "pkg:nix-fetch/crate-equivalent-1.0.2.tar.gz?hash=sha256:h3pKzocTsLzypOfuyCUpwCnx0GGYhtGBRf6pbD/+XA8="
+          "name": "crate-find-msvc-tools-0.1.9.tar.gz",
+          "uri": "pkg:nix-fetch/crate-find-msvc-tools-0.1.9.tar.gz?hash=sha256:W668B3QVH5BaGizEGYkwCx5vuymv8M7/oQZP3TCI1YI="
         },
         {
           "annotations": {
-            "drvPath": "k1c8d6rbk5gvvyysxrbwbqwv3x6l8f66-crate-futures-0.3.31.tar.gz.drv",
+            "drvPath": "5wn318ays1xr2bgjmf0kr3vdz3hqdb59-crate-futures-0.3.32.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "ZbwHsai8fIXF8uEQxHbHOJtFVLpyr1fYRF6mOldrCHY="
+            "sha256": "ixR+6dH20JfO+c5ijNLuYiiNlj4W+yh72ShkVbJBOC0="
           },
-          "name": "crate-futures-0.3.31.tar.gz",
-          "uri": "pkg:nix-fetch/crate-futures-0.3.31.tar.gz?hash=sha256:ZbwHsai8fIXF8uEQxHbHOJtFVLpyr1fYRF6mOldrCHY="
+          "name": "crate-futures-0.3.32.tar.gz",
+          "uri": "pkg:nix-fetch/crate-futures-0.3.32.tar.gz?hash=sha256:ixR+6dH20JfO+c5ijNLuYiiNlj4W+yh72ShkVbJBOC0="
         },
         {
           "annotations": {
-            "drvPath": "sckq2kb7vpflw8dbpyf7jicjvqgnzaja-crate-futures-channel-0.3.31.tar.gz.drv",
+            "drvPath": "l80zj76pyq27q0whrg1r2mfq3qvfv6rh-crate-futures-channel-0.3.32.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "Lf8Vv3iMZxwZNONm0H4wwYFKjvUU4a9ySmAuii++GxA="
+            "sha256": "B7vonFDXpTXlObjBe8C0m9t3dHA02qgIdAfWVfP3zB0="
           },
-          "name": "crate-futures-channel-0.3.31.tar.gz",
-          "uri": "pkg:nix-fetch/crate-futures-channel-0.3.31.tar.gz?hash=sha256:Lf8Vv3iMZxwZNONm0H4wwYFKjvUU4a9ySmAuii++GxA="
+          "name": "crate-futures-channel-0.3.32.tar.gz",
+          "uri": "pkg:nix-fetch/crate-futures-channel-0.3.32.tar.gz?hash=sha256:B7vonFDXpTXlObjBe8C0m9t3dHA02qgIdAfWVfP3zB0="
         },
         {
           "annotations": {
-            "drvPath": "1rpcix70p779s3lv4x4czskzppc2p528-crate-futures-core-0.3.31.tar.gz.drv",
+            "drvPath": "ikw7xd0kdx086q8bdnxkmifg6nla5sq7-crate-futures-core-0.3.32.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "BfKQWcDCCQYS6NdCF4sFgNLclAyDeFGtcjCW+Hr2Zj4="
+            "sha256": "fjRQgVJy71jOxtVkQj9udV4lN5shewvGiOKVuiTfax0="
           },
-          "name": "crate-futures-core-0.3.31.tar.gz",
-          "uri": "pkg:nix-fetch/crate-futures-core-0.3.31.tar.gz?hash=sha256:BfKQWcDCCQYS6NdCF4sFgNLclAyDeFGtcjCW+Hr2Zj4="
+          "name": "crate-futures-core-0.3.32.tar.gz",
+          "uri": "pkg:nix-fetch/crate-futures-core-0.3.32.tar.gz?hash=sha256:fjRQgVJy71jOxtVkQj9udV4lN5shewvGiOKVuiTfax0="
         },
         {
           "annotations": {
-            "drvPath": "5a0lqss9fq7hpxry2j83ynqz55nm85jm-crate-futures-executor-0.3.31.tar.gz.drv",
+            "drvPath": "p7nl2p4aglv9zx5msnbajmjpdq1qb3am-crate-futures-executor-0.3.32.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "HijR2Zf1heVK68P5fTnnIziRISOmczDXI/27Vk1kbJ8="
+            "sha256": "uvKcOIGDQqOya1uSNjnnsfSmH8XnYQLUsZgcbcenV50="
           },
-          "name": "crate-futures-executor-0.3.31.tar.gz",
-          "uri": "pkg:nix-fetch/crate-futures-executor-0.3.31.tar.gz?hash=sha256:HijR2Zf1heVK68P5fTnnIziRISOmczDXI/27Vk1kbJ8="
+          "name": "crate-futures-executor-0.3.32.tar.gz",
+          "uri": "pkg:nix-fetch/crate-futures-executor-0.3.32.tar.gz?hash=sha256:uvKcOIGDQqOya1uSNjnnsfSmH8XnYQLUsZgcbcenV50="
         },
         {
           "annotations": {
-            "drvPath": "40mw6jzlc81kpylfp8qgsx5331qi0jhd-crate-futures-io-0.3.31.tar.gz.drv",
+            "drvPath": "kmslck42020myn0qkwk41zf2x8ji7vjc-crate-futures-io-0.3.32.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "nlwbeMpKrhrAbEilJqZVdgaFFJ8NRl0h83q/5XzgdcY="
+            "sha256": "zsujXXrZJ+I2JLIq1VI18iOc+kT9EEKO7L66bWpxdxg="
           },
-          "name": "crate-futures-io-0.3.31.tar.gz",
-          "uri": "pkg:nix-fetch/crate-futures-io-0.3.31.tar.gz?hash=sha256:nlwbeMpKrhrAbEilJqZVdgaFFJ8NRl0h83q/5XzgdcY="
+          "name": "crate-futures-io-0.3.32.tar.gz",
+          "uri": "pkg:nix-fetch/crate-futures-io-0.3.32.tar.gz?hash=sha256:zsujXXrZJ+I2JLIq1VI18iOc+kT9EEKO7L66bWpxdxg="
         },
         {
           "annotations": {
-            "drvPath": "6pmhkkkbsq1w6rfi31p9yf1m8f0ab28a-crate-futures-sink-0.3.31.tar.gz.drv",
+            "drvPath": "8n21149f8626f5vmgihxd4y8r3db67cs-crate-futures-sink-0.3.32.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "5XX6t9Hg3LjQx7z5pj7iE4FqtRkC5tJEqVgZrKzx1Pc="
+            "sha256": "w5dU4VczGwE5eOyRmSveGsCJhDRDxJy8f0YVCw+tCJM="
           },
-          "name": "crate-futures-sink-0.3.31.tar.gz",
-          "uri": "pkg:nix-fetch/crate-futures-sink-0.3.31.tar.gz?hash=sha256:5XX6t9Hg3LjQx7z5pj7iE4FqtRkC5tJEqVgZrKzx1Pc="
+          "name": "crate-futures-sink-0.3.32.tar.gz",
+          "uri": "pkg:nix-fetch/crate-futures-sink-0.3.32.tar.gz?hash=sha256:w5dU4VczGwE5eOyRmSveGsCJhDRDxJy8f0YVCw+tCJM="
         },
         {
           "annotations": {
-            "drvPath": "fd4na4qq881kmhdnklnzqnw0645y3q9g-crate-futures-task-0.3.31.tar.gz.drv",
+            "drvPath": "nk6vrjqb3grjipk3gkkl9ajwzqxgw3l4-crate-futures-task-0.3.32.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "+Q99zgci6VEE/LCVWFkQwJdyUvKG41S14704kCzZmYg="
+            "sha256": "A3cRs9WcMwBNOFb73IO5nU/zeiR2j6G+nONTihzeQ5M="
           },
-          "name": "crate-futures-task-0.3.31.tar.gz",
-          "uri": "pkg:nix-fetch/crate-futures-task-0.3.31.tar.gz?hash=sha256:+Q99zgci6VEE/LCVWFkQwJdyUvKG41S14704kCzZmYg="
+          "name": "crate-futures-task-0.3.32.tar.gz",
+          "uri": "pkg:nix-fetch/crate-futures-task-0.3.32.tar.gz?hash=sha256:A3cRs9WcMwBNOFb73IO5nU/zeiR2j6G+nONTihzeQ5M="
         },
         {
           "annotations": {
-            "drvPath": "rk45hayh8xgr0d3s645k9ck8kivi0sc4-crate-futures-util-0.3.31.tar.gz.drv",
+            "drvPath": "zpk2mxl67rv2vw0wnfzndkifvqyyq5zm-crate-futures-util-0.3.32.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "n6CDFbthIIjMORJJ79w7x3U28WyR9s9JXm++hbIKSoE="
+            "sha256": "OJykEpbmGQtIBT3gMh0Cp38y+KXSRh3Th2LAWTgFxtY="
           },
-          "name": "crate-futures-util-0.3.31.tar.gz",
-          "uri": "pkg:nix-fetch/crate-futures-util-0.3.31.tar.gz?hash=sha256:n6CDFbthIIjMORJJ79w7x3U28WyR9s9JXm++hbIKSoE="
+          "name": "crate-futures-util-0.3.32.tar.gz",
+          "uri": "pkg:nix-fetch/crate-futures-util-0.3.32.tar.gz?hash=sha256:OJykEpbmGQtIBT3gMh0Cp38y+KXSRh3Th2LAWTgFxtY="
         },
         {
           "annotations": {
-            "drvPath": "s2qdsimjf81vjfy7cv9b0m7lfmzvwq5v-crate-getrandom-0.2.15.tar.gz.drv",
+            "drvPath": "dglqnkcg5czas4sswnhrzrhddcds0p7h-crate-getrandom-0.2.17.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "xFZ8jbEK6RCJyZr4TGjDjaPsLwh8P4KWC82/Nla29Nc="
+            "sha256": "/yq8AL5/ym68R0UkaXridq2EetCms/qkvLAn6aRhStA="
           },
-          "name": "crate-getrandom-0.2.15.tar.gz",
-          "uri": "pkg:nix-fetch/crate-getrandom-0.2.15.tar.gz?hash=sha256:xFZ8jbEK6RCJyZr4TGjDjaPsLwh8P4KWC82/Nla29Nc="
+          "name": "crate-getrandom-0.2.17.tar.gz",
+          "uri": "pkg:nix-fetch/crate-getrandom-0.2.17.tar.gz?hash=sha256:/yq8AL5/ym68R0UkaXridq2EetCms/qkvLAn6aRhStA="
         },
         {
           "annotations": {
@@ -894,17 +894,6 @@
         },
         {
           "annotations": {
-            "drvPath": "579zqg7hc5i4y5b1m9jydhphrkpndylf-crate-hashbrown-0.15.2.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "vxUUAP8Lr/VGUAfdLz5xfz/lAgdMpWMGnOOmYp0Hsok="
-          },
-          "name": "crate-hashbrown-0.15.2.tar.gz",
-          "uri": "pkg:nix-fetch/crate-hashbrown-0.15.2.tar.gz?hash=sha256:vxUUAP8Lr/VGUAfdLz5xfz/lAgdMpWMGnOOmYp0Hsok="
-        },
-        {
-          "annotations": {
             "drvPath": "zhkpvl28gxm8f3rv8d8sxq8dg4ldrrnc-crate-heck-0.4.1.tar.gz.drv",
             "outputHashMode": "flat"
           },
@@ -927,14 +916,14 @@
         },
         {
           "annotations": {
-            "drvPath": "j7j3i2md7x29kv617b8b8sjjjsf299vy-crate-hermit-abi-0.3.9.tar.gz.drv",
+            "drvPath": "7h36nkk799xy3wbsj9xp32dgxbzaa96h-crate-hermit-abi-0.5.2.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "0jHfuJz//bww5/xBV57WBmrQOr2p5WfMr65gK5fsUCQ="
+            "sha256": "/A/vRW5LqpbalQRVzQLAgcqVOxQSmOQds/x+NrHahJw="
           },
-          "name": "crate-hermit-abi-0.3.9.tar.gz",
-          "uri": "pkg:nix-fetch/crate-hermit-abi-0.3.9.tar.gz?hash=sha256:0jHfuJz//bww5/xBV57WBmrQOr2p5WfMr65gK5fsUCQ="
+          "name": "crate-hermit-abi-0.5.2.tar.gz",
+          "uri": "pkg:nix-fetch/crate-hermit-abi-0.5.2.tar.gz?hash=sha256:/A/vRW5LqpbalQRVzQLAgcqVOxQSmOQds/x+NrHahJw="
         },
         {
           "annotations": {
@@ -949,80 +938,69 @@
         },
         {
           "annotations": {
-            "drvPath": "a1xhwqdmifvfb2z2c646g19aga5rzrg8-crate-indexmap-2.9.0.tar.gz.drv",
+            "drvPath": "2lzny4xrasgdwwx63wjavw8hxk2n1zbm-crate-libc-0.2.183.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "zqcN23lZliB61Xc1tQxZgtiETzi6nuXxrtz7cIoqoR4="
+            "sha256": "tbZGZSv2ZhWZ4dqJAbO5UiiW8B5za61fcj/no6J/iZ0="
           },
-          "name": "crate-indexmap-2.9.0.tar.gz",
-          "uri": "pkg:nix-fetch/crate-indexmap-2.9.0.tar.gz?hash=sha256:zqcN23lZliB61Xc1tQxZgtiETzi6nuXxrtz7cIoqoR4="
+          "name": "crate-libc-0.2.183.tar.gz",
+          "uri": "pkg:nix-fetch/crate-libc-0.2.183.tar.gz?hash=sha256:tbZGZSv2ZhWZ4dqJAbO5UiiW8B5za61fcj/no6J/iZ0="
         },
         {
           "annotations": {
-            "drvPath": "i39f4h8bgj21f297m9l9i4nk4a2nl4gw-crate-libc-0.2.171.tar.gz.drv",
+            "drvPath": "sv0hkcv20pnlqa6imjhccjzslyh4m3lv-crate-libmimalloc-sys-0.1.44.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "wZk3IW6dOqmVbZu438CwyL62BY/E96TcTYUO34aiN9Y="
+            "sha256": "Zn9P7CDynfxrxzV8WC2ReWwWmtfi/OcJRorv6ywJmHA="
           },
-          "name": "crate-libc-0.2.171.tar.gz",
-          "uri": "pkg:nix-fetch/crate-libc-0.2.171.tar.gz?hash=sha256:wZk3IW6dOqmVbZu438CwyL62BY/E96TcTYUO34aiN9Y="
+          "name": "crate-libmimalloc-sys-0.1.44.tar.gz",
+          "uri": "pkg:nix-fetch/crate-libmimalloc-sys-0.1.44.tar.gz?hash=sha256:Zn9P7CDynfxrxzV8WC2ReWwWmtfi/OcJRorv6ywJmHA="
         },
         {
           "annotations": {
-            "drvPath": "vmkvci25yadv57xhxgm5395vzkmv3l2d-crate-libmimalloc-sys-0.1.42.tar.gz.drv",
+            "drvPath": "yd2a5068lri39b6p2pr4vbfcdl5nc5hn-crate-memchr-2.8.0.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "7J1vrCd2HavNTuc1cc2wa3Ai3JkImsvlQ1aR7f+qwPQ="
+            "sha256": "+MpY9EfwbtF9X8QEPOGxDdIF4GD7POW5ebjtjln/P3k="
           },
-          "name": "crate-libmimalloc-sys-0.1.42.tar.gz",
-          "uri": "pkg:nix-fetch/crate-libmimalloc-sys-0.1.42.tar.gz?hash=sha256:7J1vrCd2HavNTuc1cc2wa3Ai3JkImsvlQ1aR7f+qwPQ="
+          "name": "crate-memchr-2.8.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-memchr-2.8.0.tar.gz?hash=sha256:+MpY9EfwbtF9X8QEPOGxDdIF4GD7POW5ebjtjln/P3k="
         },
         {
           "annotations": {
-            "drvPath": "42knksvfsbqbracbiv81fnn3zyqwn9hm-crate-memchr-2.7.4.tar.gz.drv",
+            "drvPath": "9mqwp22akzprza2gmhk18q89abxyxb20-crate-mimalloc-0.1.48.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "eMqasaC6ux59VpXjUwiGKJwYzy+H7BmldaCr3OES46M="
+            "sha256": "4e5mpLZMdPTvKIvLuRkq2cP+qtdRkxKayFCa9UOJT9g="
           },
-          "name": "crate-memchr-2.7.4.tar.gz",
-          "uri": "pkg:nix-fetch/crate-memchr-2.7.4.tar.gz?hash=sha256:eMqasaC6ux59VpXjUwiGKJwYzy+H7BmldaCr3OES46M="
+          "name": "crate-mimalloc-0.1.48.tar.gz",
+          "uri": "pkg:nix-fetch/crate-mimalloc-0.1.48.tar.gz?hash=sha256:4e5mpLZMdPTvKIvLuRkq2cP+qtdRkxKayFCa9UOJT9g="
         },
         {
           "annotations": {
-            "drvPath": "ann871n2f2cc5v9q94bp3gcrsc0g2rpl-crate-mimalloc-0.1.46.tar.gz.drv",
+            "drvPath": "a5mkmjj25y0icr8r92khb2kg3jg8w03c-crate-num_cpus-1.17.0.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "mVlC9DK7tIIqfpw/qoemlRhbDQknO6hfCXtU9ORY8q8="
+            "sha256": "kd9Lveda/tdjtwi37uHo52UeAtl/bV3XY+iTZ+lXsjs="
           },
-          "name": "crate-mimalloc-0.1.46.tar.gz",
-          "uri": "pkg:nix-fetch/crate-mimalloc-0.1.46.tar.gz?hash=sha256:mVlC9DK7tIIqfpw/qoemlRhbDQknO6hfCXtU9ORY8q8="
+          "name": "crate-num_cpus-1.17.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-num_cpus-1.17.0.tar.gz?hash=sha256:kd9Lveda/tdjtwi37uHo52UeAtl/bV3XY+iTZ+lXsjs="
         },
         {
           "annotations": {
-            "drvPath": "hbpx4nva8v3qjkwz994i61ajwgfqnv5k-crate-num_cpus-1.16.0.tar.gz.drv",
+            "drvPath": "cln7c0xgzb2i7rc9m21hzhlcz2d86j8f-crate-once_cell-1.21.4.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "QWH8ttYC1NIIGvfDpFhS2HWgPdM3pr/dbgZAe2E0KkM="
+            "sha256": "n3w+S+sz+F1Frj46F5IYVwbI4W0EMjjFkzMcx80xO1A="
           },
-          "name": "crate-num_cpus-1.16.0.tar.gz",
-          "uri": "pkg:nix-fetch/crate-num_cpus-1.16.0.tar.gz?hash=sha256:QWH8ttYC1NIIGvfDpFhS2HWgPdM3pr/dbgZAe2E0KkM="
-        },
-        {
-          "annotations": {
-            "drvPath": "vm2d6fgidps9aqwv6qy3gz5cy34bwzr7-crate-once_cell-1.21.3.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "QvXhXJlTxeTMzusuc4KnFkgsNFFTFfewNTK4tOg5PS0="
-          },
-          "name": "crate-once_cell-1.21.3.tar.gz",
-          "uri": "pkg:nix-fetch/crate-once_cell-1.21.3.tar.gz?hash=sha256:QvXhXJlTxeTMzusuc4KnFkgsNFFTFfewNTK4tOg5PS0="
+          "name": "crate-once_cell-1.21.4.tar.gz",
+          "uri": "pkg:nix-fetch/crate-once_cell-1.21.4.tar.gz?hash=sha256:n3w+S+sz+F1Frj46F5IYVwbI4W0EMjjFkzMcx80xO1A="
         },
         {
           "annotations": {
@@ -1037,25 +1015,14 @@
         },
         {
           "annotations": {
-            "drvPath": "i4rh4nysy2whh187glf5hjwj8kwxc91r-crate-pin-project-lite-0.2.16.tar.gz.drv",
+            "drvPath": "8d70h6z55pf1gp8bdqm0qjwbqwv19wgf-crate-pin-project-lite-0.2.17.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "Ozz/kivVFwm2Bdnq2apxAx2BRHFC2CjrSm66dv5hn5s="
+            "sha256": "qJMi356+HBV41onJIxjgcJZ9EEK1Eq++SVGHI/Tm1c0="
           },
-          "name": "crate-pin-project-lite-0.2.16.tar.gz",
-          "uri": "pkg:nix-fetch/crate-pin-project-lite-0.2.16.tar.gz?hash=sha256:Ozz/kivVFwm2Bdnq2apxAx2BRHFC2CjrSm66dv5hn5s="
-        },
-        {
-          "annotations": {
-            "drvPath": "wjlffzykgn2jrgwzvxjs64i0fy0891xh-crate-pin-utils-0.1.0.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "i4cNjBUbby+5PoShMUYTjwXQLtEcfnxU+IJqqvfJ8YQ="
-          },
-          "name": "crate-pin-utils-0.1.0.tar.gz",
-          "uri": "pkg:nix-fetch/crate-pin-utils-0.1.0.tar.gz?hash=sha256:i4cNjBUbby+5PoShMUYTjwXQLtEcfnxU+IJqqvfJ8YQ="
+          "name": "crate-pin-project-lite-0.2.17.tar.gz",
+          "uri": "pkg:nix-fetch/crate-pin-project-lite-0.2.17.tar.gz?hash=sha256:qJMi356+HBV41onJIxjgcJZ9EEK1Eq++SVGHI/Tm1c0="
         },
         {
           "annotations": {
@@ -1092,25 +1059,25 @@
         },
         {
           "annotations": {
-            "drvPath": "50kbf8bws16m2vvhbpw57bii7915zy70-crate-proc-macro2-1.0.94.tar.gz.drv",
+            "drvPath": "44rmqs76amw2hncxj6w90xiz0sygd11q-crate-proc-macro2-1.0.106.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "oxlxdS5wuLJobX5G7Bf7ONrUBR2UAkyI30m2Z8rqnIQ="
+            "sha256": "j9APC7LpDYHRBEwrMmF/aPy5+ju3ZAwj6cdI5T+zCTQ="
           },
-          "name": "crate-proc-macro2-1.0.94.tar.gz",
-          "uri": "pkg:nix-fetch/crate-proc-macro2-1.0.94.tar.gz?hash=sha256:oxlxdS5wuLJobX5G7Bf7ONrUBR2UAkyI30m2Z8rqnIQ="
+          "name": "crate-proc-macro2-1.0.106.tar.gz",
+          "uri": "pkg:nix-fetch/crate-proc-macro2-1.0.106.tar.gz?hash=sha256:j9APC7LpDYHRBEwrMmF/aPy5+ju3ZAwj6cdI5T+zCTQ="
         },
         {
           "annotations": {
-            "drvPath": "95zq2bpqf25m8mf0i4ir19g4bvjdjjna-crate-quote-1.0.40.tar.gz.drv",
+            "drvPath": "gvhdcd5ni8n61gp0xyf8hmcdwbac4rc6-crate-quote-1.0.45.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "GIXAOVcNwA3LT/CHqJ4YX9VrriNN3H8FapRb82RnJI0="
+            "sha256": "QfJhmWYFBok4LStE9mT0vFk+EpeFo21u43bd83JZuSQ="
           },
-          "name": "crate-quote-1.0.40.tar.gz",
-          "uri": "pkg:nix-fetch/crate-quote-1.0.40.tar.gz?hash=sha256:GIXAOVcNwA3LT/CHqJ4YX9VrriNN3H8FapRb82RnJI0="
+          "name": "crate-quote-1.0.45.tar.gz",
+          "uri": "pkg:nix-fetch/crate-quote-1.0.45.tar.gz?hash=sha256:QfJhmWYFBok4LStE9mT0vFk+EpeFo21u43bd83JZuSQ="
         },
         {
           "annotations": {
@@ -1136,25 +1103,25 @@
         },
         {
           "annotations": {
-            "drvPath": "nb96kcgmy77p6q9jhdprzwyd55rn6djv-crate-rnix-0.12.0.tar.gz.drv",
+            "drvPath": "iqns6xbdr2mlrrmqwll20ylqb4p0i09y-crate-rnix-0.14.0.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "bxXgCwq0Or1w1QtvjNAhKQAo+bf91836bDWZcXO8G6k="
+            "sha256": "wWO9Fzcu7N8Q01HDRYS33nwaM75OkqMvP7P1p/4/V5s="
           },
-          "name": "crate-rnix-0.12.0.tar.gz",
-          "uri": "pkg:nix-fetch/crate-rnix-0.12.0.tar.gz?hash=sha256:bxXgCwq0Or1w1QtvjNAhKQAo+bf91836bDWZcXO8G6k="
+          "name": "crate-rnix-0.14.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-rnix-0.14.0.tar.gz?hash=sha256:wWO9Fzcu7N8Q01HDRYS33nwaM75OkqMvP7P1p/4/V5s="
         },
         {
           "annotations": {
-            "drvPath": "mzp50dqsaxskd72nbn9kv8kq0irba1hb-crate-rowan-0.15.16.tar.gz.drv",
+            "drvPath": "ji9vifxwchj3q8zx5a88d89xzah45hi5-crate-rowan-0.16.1.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "ClQrAlP6RuYy0nodxc97kw3k34ZZ3G5yC2R/xyFHrj0="
+            "sha256": "QXo6n1guNJg0BRuKEMjXHKiNpCEeQJNSjja5hF9rXyE="
           },
-          "name": "crate-rowan-0.15.16.tar.gz",
-          "uri": "pkg:nix-fetch/crate-rowan-0.15.16.tar.gz?hash=sha256:ClQrAlP6RuYy0nodxc97kw3k34ZZ3G5yC2R/xyFHrj0="
+          "name": "crate-rowan-0.16.1.tar.gz",
+          "uri": "pkg:nix-fetch/crate-rowan-0.16.1.tar.gz?hash=sha256:QXo6n1guNJg0BRuKEMjXHKiNpCEeQJNSjja5hF9rXyE="
         },
         {
           "annotations": {
@@ -1180,36 +1147,47 @@
         },
         {
           "annotations": {
-            "drvPath": "bjv6zvy1qmd9xf1gdskshvgc8s2zsf07-crate-serde-1.0.219.tar.gz.drv",
+            "drvPath": "yx6r1fxwrsdd7gqfzsax8a62fx1l2vl7-crate-serde-1.0.228.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "Xw4sbtZgYBm04p5p26upWxGFRBDlNH1SUAJFbbu3hrY="
+            "sha256": "mo6U6n83i9Msu9NxmKSpFDYYDFu0ckEeSLXsLiEkrp4="
           },
-          "name": "crate-serde-1.0.219.tar.gz",
-          "uri": "pkg:nix-fetch/crate-serde-1.0.219.tar.gz?hash=sha256:Xw4sbtZgYBm04p5p26upWxGFRBDlNH1SUAJFbbu3hrY="
+          "name": "crate-serde-1.0.228.tar.gz",
+          "uri": "pkg:nix-fetch/crate-serde-1.0.228.tar.gz?hash=sha256:mo6U6n83i9Msu9NxmKSpFDYYDFu0ckEeSLXsLiEkrp4="
         },
         {
           "annotations": {
-            "drvPath": "bm0aswr2xs6smix3m42nc3kl370xlgi8-crate-serde_derive-1.0.219.tar.gz.drv",
+            "drvPath": "95gqk4w1al4p90b3w5zq6s94f54m66ji-crate-serde_core-1.0.228.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "WwJ2z38sczZfcVfIEjwhzZpQ+72ER1evKMofWSX8KgA="
+            "sha256": "QdOFx9TKWOWfxzKvJcOYO2eshSwaJQAK/hF13kWLZ60="
           },
-          "name": "crate-serde_derive-1.0.219.tar.gz",
-          "uri": "pkg:nix-fetch/crate-serde_derive-1.0.219.tar.gz?hash=sha256:WwJ2z38sczZfcVfIEjwhzZpQ+72ER1evKMofWSX8KgA="
+          "name": "crate-serde_core-1.0.228.tar.gz",
+          "uri": "pkg:nix-fetch/crate-serde_core-1.0.228.tar.gz?hash=sha256:QdOFx9TKWOWfxzKvJcOYO2eshSwaJQAK/hF13kWLZ60="
         },
         {
           "annotations": {
-            "drvPath": "qifishxs54l9hmdxk2c8jpkvay47fm6y-crate-serde_spanned-0.6.8.tar.gz.drv",
+            "drvPath": "skahi8rybkcawk9i9cvyd9m61n2fwqj8-crate-serde_derive-1.0.228.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "h2B8sTmO1Z1Icy5XWkwop6jr8kVLlk/j8iTyr8B5CeE="
+            "sha256": "1UDyINMYcXPaIg+IWrZmCDZ7ZXTpJQEak1Pkut2pHXk="
           },
-          "name": "crate-serde_spanned-0.6.8.tar.gz",
-          "uri": "pkg:nix-fetch/crate-serde_spanned-0.6.8.tar.gz?hash=sha256:h2B8sTmO1Z1Icy5XWkwop6jr8kVLlk/j8iTyr8B5CeE="
+          "name": "crate-serde_derive-1.0.228.tar.gz",
+          "uri": "pkg:nix-fetch/crate-serde_derive-1.0.228.tar.gz?hash=sha256:1UDyINMYcXPaIg+IWrZmCDZ7ZXTpJQEak1Pkut2pHXk="
+        },
+        {
+          "annotations": {
+            "drvPath": "r71wj6w1ccdg8fsj8dqpvzfy0y7m9qhr-crate-serde_spanned-1.1.0.tar.gz.drv",
+            "outputHashMode": "flat"
+          },
+          "digest": {
+            "sha256": "h2rDUQYNT4grsQMrY2nrCu95rZ3x6ovEBIdNjMPQzZg="
+          },
+          "name": "crate-serde_spanned-1.1.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-serde_spanned-1.1.0.tar.gz?hash=sha256:h2rDUQYNT4grsQMrY2nrCu95rZ3x6ovEBIdNjMPQzZg="
         },
         {
           "annotations": {
@@ -1224,14 +1202,14 @@
         },
         {
           "annotations": {
-            "drvPath": "l6v38xmd116753klaivm74a6bhsnq4kb-crate-slab-0.4.9.tar.gz.drv",
+            "drvPath": "xiifzzl6kpb7y4196p38dy9qvkgzi0za-crate-slab-0.4.12.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "j5Kklvt2a0F8mWucXlfa8vetOwvr4cz8pIVjkOPTu2c="
+            "sha256": "DHkN4jEk+atEVE16wF1gRArcWGR5zlAcHW19o82MnPU="
           },
-          "name": "crate-slab-0.4.9.tar.gz",
-          "uri": "pkg:nix-fetch/crate-slab-0.4.9.tar.gz?hash=sha256:j5Kklvt2a0F8mWucXlfa8vetOwvr4cz8pIVjkOPTu2c="
+          "name": "crate-slab-0.4.12.tar.gz",
+          "uri": "pkg:nix-fetch/crate-slab-0.4.12.tar.gz?hash=sha256:DHkN4jEk+atEVE16wF1gRArcWGR5zlAcHW19o82MnPU="
         },
         {
           "annotations": {
@@ -1257,14 +1235,14 @@
         },
         {
           "annotations": {
-            "drvPath": "a629l0898dbvkbmg28w61n02ydny4ws4-crate-syn-2.0.100.tar.gz.drv",
+            "drvPath": "7mb0y1yyp5lskaashq3rvc01z36q7qfy-crate-syn-2.0.117.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "sJpErMrYHhuhzXSjJGG6id7okJW6F7MvXQNoOxsfwqA="
+            "sha256": "5mW4gD57HSpyf0AjRWu7vnTaZwmcWFJYrwrZxQE7m5k="
           },
-          "name": "crate-syn-2.0.100.tar.gz",
-          "uri": "pkg:nix-fetch/crate-syn-2.0.100.tar.gz?hash=sha256:sJpErMrYHhuhzXSjJGG6id7okJW6F7MvXQNoOxsfwqA="
+          "name": "crate-syn-2.0.117.tar.gz",
+          "uri": "pkg:nix-fetch/crate-syn-2.0.117.tar.gz?hash=sha256:5mW4gD57HSpyf0AjRWu7vnTaZwmcWFJYrwrZxQE7m5k="
         },
         {
           "annotations": {
@@ -1301,47 +1279,47 @@
         },
         {
           "annotations": {
-            "drvPath": "brxh4nicr2d3pl0v7f70gp2c09k4xppj-crate-toml-0.8.20.tar.gz.drv",
+            "drvPath": "0f7zy03yidbds10424gczpk7v2zhx0hj-crate-toml-1.1.0+spec-1.1.0.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "zYelzdb/q3M7L3S8T9fuX/9mNBJJmawnjDX8eMYSAUg="
+            "sha256": "+BlcoF5Otyj0upTz4ykWYTIK9znE5Dd5y9+ugqsjn8w="
           },
-          "name": "crate-toml-0.8.20.tar.gz",
-          "uri": "pkg:nix-fetch/crate-toml-0.8.20.tar.gz?hash=sha256:zYelzdb/q3M7L3S8T9fuX/9mNBJJmawnjDX8eMYSAUg="
+          "name": "crate-toml-1.1.0+spec-1.1.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-toml-1.1.0+spec-1.1.0.tar.gz?hash=sha256:+BlcoF5Otyj0upTz4ykWYTIK9znE5Dd5y9+ugqsjn8w="
         },
         {
           "annotations": {
-            "drvPath": "p9bwma3gyqkmvjrysyish7c8b16mj5i7-crate-toml_datetime-0.6.8.tar.gz.drv",
+            "drvPath": "sbhl86lgihixi6wk49vw6kd2l3k52xcp-crate-toml_datetime-1.1.0+spec-1.1.0.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "Ddc1jsuPwvjQFL+G9vY4znK6JSosOiVy8qeV8dI++0E="
+            "sha256": "lyUafDF+A62Dd0qHUqfoH7YGd0Bgn3XqK1hbVppZGY8="
           },
-          "name": "crate-toml_datetime-0.6.8.tar.gz",
-          "uri": "pkg:nix-fetch/crate-toml_datetime-0.6.8.tar.gz?hash=sha256:Ddc1jsuPwvjQFL+G9vY4znK6JSosOiVy8qeV8dI++0E="
+          "name": "crate-toml_datetime-1.1.0+spec-1.1.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-toml_datetime-1.1.0+spec-1.1.0.tar.gz?hash=sha256:lyUafDF+A62Dd0qHUqfoH7YGd0Bgn3XqK1hbVppZGY8="
         },
         {
           "annotations": {
-            "drvPath": "c7f6xh3pm981cmkaqqcx40c1062kbpv5-crate-toml_edit-0.22.24.tar.gz.drv",
+            "drvPath": "abr5gnvnwpyldq17phrpmklss0cwyrfh-crate-toml_parser-1.1.0+spec-1.1.0.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "F7R5X/Xt0gHHzW3KBlrlmXLOd9G4D6CoTZSVDs59FHQ="
+            "sha256": "IzTxHuNjYH6wTfm4/IoTyhcVpyuoZiomrChcmKq7QBE="
           },
-          "name": "crate-toml_edit-0.22.24.tar.gz",
-          "uri": "pkg:nix-fetch/crate-toml_edit-0.22.24.tar.gz?hash=sha256:F7R5X/Xt0gHHzW3KBlrlmXLOd9G4D6CoTZSVDs59FHQ="
+          "name": "crate-toml_parser-1.1.0+spec-1.1.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-toml_parser-1.1.0+spec-1.1.0.tar.gz?hash=sha256:IzTxHuNjYH6wTfm4/IoTyhcVpyuoZiomrChcmKq7QBE="
         },
         {
           "annotations": {
-            "drvPath": "71j6dxk0m4cwcxs8hlayv57ibqh6bgsd-crate-unicode-ident-1.0.18.tar.gz.drv",
+            "drvPath": "mvdb2ivjpjjsmcfxl9p4xj57kwy7qmvk-crate-unicode-ident-1.0.24.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "Wl85QEpdpQcSpMHuzyXpDdYrYTUCt+kl/U5NGbXJZRI="
+            "sha256": "5uQxPNX809rVyvoXlwLiskT3YJkfRTl9FNTr84JH2nU="
           },
-          "name": "crate-unicode-ident-1.0.18.tar.gz",
-          "uri": "pkg:nix-fetch/crate-unicode-ident-1.0.18.tar.gz?hash=sha256:Wl85QEpdpQcSpMHuzyXpDdYrYTUCt+kl/U5NGbXJZRI="
+          "name": "crate-unicode-ident-1.0.24.tar.gz",
+          "uri": "pkg:nix-fetch/crate-unicode-ident-1.0.24.tar.gz?hash=sha256:5uQxPNX809rVyvoXlwLiskT3YJkfRTl9FNTr84JH2nU="
         },
         {
           "annotations": {
@@ -1367,14 +1345,14 @@
         },
         {
           "annotations": {
-            "drvPath": "bkir9a8if91v8zczjm210xnyq8hyky1v-crate-wasi-0.11.0+wasi-snapshot-preview1.tar.gz.drv",
+            "drvPath": "gv9kfdf45w5r0jyqzvqaqgh1sddj15x8-crate-wasi-0.11.1+wasi-snapshot-preview1.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "nI2H5ytko7TbKNEc4pI3wkYYj09RBX1lp+q2O3mH5CM="
+            "sha256": "zPPsZRqEfrAd5zzK0V632Z+ASF3gQ++y83DNZU9OpEs="
           },
-          "name": "crate-wasi-0.11.0+wasi-snapshot-preview1.tar.gz",
-          "uri": "pkg:nix-fetch/crate-wasi-0.11.0+wasi-snapshot-preview1.tar.gz?hash=sha256:nI2H5ytko7TbKNEc4pI3wkYYj09RBX1lp+q2O3mH5CM="
+          "name": "crate-wasi-0.11.1+wasi-snapshot-preview1.tar.gz",
+          "uri": "pkg:nix-fetch/crate-wasi-0.11.1+wasi-snapshot-preview1.tar.gz?hash=sha256:zPPsZRqEfrAd5zzK0V632Z+ASF3gQ++y83DNZU9OpEs="
         },
         {
           "annotations": {
@@ -1400,14 +1378,14 @@
         },
         {
           "annotations": {
-            "drvPath": "j8apris7bjkj6352zvair3bv2gff43vb-crate-winapi-util-0.1.9.tar.gz.drv",
+            "drvPath": "mgjspanh12mkqcn6vf1j2qak19wbg521-crate-winapi-util-0.1.11.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "zyIck+E6MNeT92RaDndixV0WnbsKSWcZGKIxnSibELs="
+            "sha256": "wqexwDyHYSKqQ/MCDmw8PuXAUIHJoAc5+vdQOuuhDSI="
           },
-          "name": "crate-winapi-util-0.1.9.tar.gz",
-          "uri": "pkg:nix-fetch/crate-winapi-util-0.1.9.tar.gz?hash=sha256:zyIck+E6MNeT92RaDndixV0WnbsKSWcZGKIxnSibELs="
+          "name": "crate-winapi-util-0.1.11.tar.gz",
+          "uri": "pkg:nix-fetch/crate-winapi-util-0.1.11.tar.gz?hash=sha256:wqexwDyHYSKqQ/MCDmw8PuXAUIHJoAc5+vdQOuuhDSI="
         },
         {
           "annotations": {
@@ -1422,124 +1400,36 @@
         },
         {
           "annotations": {
-            "drvPath": "hj9zrsz4y3gdaicq0cfkfv8d5wyvmq8k-crate-windows-sys-0.59.0.tar.gz.drv",
+            "drvPath": "g2r8zsv2hm655w6wxhrkmd3jqc6whnp3-crate-windows-link-0.2.1.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "Hji8TXntZ/0HW8wlGhw5syoXdrvpLlvvHwvx+MUxhTs="
+            "sha256": "8IBSIuV/dSHWpi42+pFjvIkazUIvlx3v6X1k5w0KT+U="
           },
-          "name": "crate-windows-sys-0.59.0.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows-sys-0.59.0.tar.gz?hash=sha256:Hji8TXntZ/0HW8wlGhw5syoXdrvpLlvvHwvx+MUxhTs="
+          "name": "crate-windows-link-0.2.1.tar.gz",
+          "uri": "pkg:nix-fetch/crate-windows-link-0.2.1.tar.gz?hash=sha256:8IBSIuV/dSHWpi42+pFjvIkazUIvlx3v6X1k5w0KT+U="
         },
         {
           "annotations": {
-            "drvPath": "q6439fz6xy3n306vn1f625g57gz251n1-crate-windows-targets-0.52.6.tar.gz.drv",
+            "drvPath": "344gb3q92rg1gdvlxfa4yavhyi7cpcm9-crate-windows-sys-0.61.2.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "m3JPcnluA2q5DBAh1HgNTT1kispZ5JHmuY5yW4TpmXM="
+            "sha256": "rhNyKby9bN8Pe4CjHfYXZhRQd930lBanKLAss5If8/w="
           },
-          "name": "crate-windows-targets-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows-targets-0.52.6.tar.gz?hash=sha256:m3JPcnluA2q5DBAh1HgNTT1kispZ5JHmuY5yW4TpmXM="
+          "name": "crate-windows-sys-0.61.2.tar.gz",
+          "uri": "pkg:nix-fetch/crate-windows-sys-0.61.2.tar.gz?hash=sha256:rhNyKby9bN8Pe4CjHfYXZhRQd930lBanKLAss5If8/w="
         },
         {
           "annotations": {
-            "drvPath": "vlr5dycd1j37waa11vma5g1gyl21zir3-crate-windows_aarch64_gnullvm-0.52.6.tar.gz.drv",
+            "drvPath": "7wm1snfw2xslh20v5hkvsp2rjrmh9r8z-crate-winnow-1.0.0.tar.gz.drv",
             "outputHashMode": "flat"
           },
           "digest": {
-            "sha256": "MqRiIYDnoOwES7VVQEyAC8n9nsJi7BR+3VmJzNDALNM="
+            "sha256": "qQ6I5GZyZKmU005tGrLSbTmNzcqLf1K+yGaJV1F/x9g="
           },
-          "name": "crate-windows_aarch64_gnullvm-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows_aarch64_gnullvm-0.52.6.tar.gz?hash=sha256:MqRiIYDnoOwES7VVQEyAC8n9nsJi7BR+3VmJzNDALNM="
-        },
-        {
-          "annotations": {
-            "drvPath": "f799gja3sgh987p4dg0g4kvz6wp6n9bx-crate-windows_aarch64_msvc-0.52.6.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "Cewqe7FS4iUrU/p4AxUAB4eVSLxwnAOd92J8q70F1Gk="
-          },
-          "name": "crate-windows_aarch64_msvc-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows_aarch64_msvc-0.52.6.tar.gz?hash=sha256:Cewqe7FS4iUrU/p4AxUAB4eVSLxwnAOd92J8q70F1Gk="
-        },
-        {
-          "annotations": {
-            "drvPath": "ds53h30nqqkybcy025xm2bqjm65wx9db-crate-windows_i686_gnu-0.52.6.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "jpta1auALpfrjilaxnIOUJ7kwkP2nXgTlAFOv+i7+gs="
-          },
-          "name": "crate-windows_i686_gnu-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows_i686_gnu-0.52.6.tar.gz?hash=sha256:jpta1auALpfrjilaxnIOUJ7kwkP2nXgTlAFOv+i7+gs="
-        },
-        {
-          "annotations": {
-            "drvPath": "lcb27amha7q1pp2wxyyiw81h86adnyjv-crate-windows_i686_gnullvm-0.52.6.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "Du5S04wJCzyqdsVjuGw6S9ce8agZKHwZ1YbXM0ro7WY="
-          },
-          "name": "crate-windows_i686_gnullvm-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows_i686_gnullvm-0.52.6.tar.gz?hash=sha256:Du5S04wJCzyqdsVjuGw6S9ce8agZKHwZ1YbXM0ro7WY="
-        },
-        {
-          "annotations": {
-            "drvPath": "h5drhfpdlc0xp30rf5frrq2ii63sh0y8-crate-windows_i686_msvc-0.52.6.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "JAlIvAXF58bau6KL+J2J/84+MDAigJ5z3q7+T27FbGY="
-          },
-          "name": "crate-windows_i686_msvc-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows_i686_msvc-0.52.6.tar.gz?hash=sha256:JAlIvAXF58bau6KL+J2J/84+MDAigJ5z3q7+T27FbGY="
-        },
-        {
-          "annotations": {
-            "drvPath": "q406a87q47qshdp6w9dgxd8mn1jb030x-crate-windows_x86_64_gnu-0.52.6.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "FHpcgKq/vwx9kBy1iV0d4w7ykH6yH7urKcqUxbCLGng="
-          },
-          "name": "crate-windows_x86_64_gnu-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows_x86_64_gnu-0.52.6.tar.gz?hash=sha256:FHpcgKq/vwx9kBy1iV0d4w7ykH6yH7urKcqUxbCLGng="
-        },
-        {
-          "annotations": {
-            "drvPath": "vyd9hk1kp5513pbfpx3bac9bx15mxkm6-crate-windows_x86_64_gnullvm-0.52.6.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "JNWyPcQXQSZ5aBOW8rSfPejBRz3rUWvTRBCHLv9R7Q0="
-          },
-          "name": "crate-windows_x86_64_gnullvm-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows_x86_64_gnullvm-0.52.6.tar.gz?hash=sha256:JNWyPcQXQSZ5aBOW8rSfPejBRz3rUWvTRBCHLv9R7Q0="
-        },
-        {
-          "annotations": {
-            "drvPath": "mbzqsx89hfg1mb2pvxp8b30aj5qk3662-crate-windows_x86_64_msvc-0.52.6.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "WJ9tqExkYgR0fRJwoqVmHqZu0cztJjHVRv37FVlZ+ew="
-          },
-          "name": "crate-windows_x86_64_msvc-0.52.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-windows_x86_64_msvc-0.52.6.tar.gz?hash=sha256:WJ9tqExkYgR0fRJwoqVmHqZu0cztJjHVRv37FVlZ+ew="
-        },
-        {
-          "annotations": {
-            "drvPath": "g5xdwabc49xl38phdlnin6sqcgvmjjpr-crate-winnow-0.7.6.tar.gz.drv",
-            "outputHashMode": "flat"
-          },
-          "digest": {
-            "sha256": "Y9P82bukSwOCHn1pnu7pWfMSbcxKqOSuGOxhfCpc6hA="
-          },
-          "name": "crate-winnow-0.7.6.tar.gz",
-          "uri": "pkg:nix-fetch/crate-winnow-0.7.6.tar.gz?hash=sha256:Y9P82bukSwOCHn1pnu7pWfMSbcxKqOSuGOxhfCpc6hA="
+          "name": "crate-winnow-1.0.0.tar.gz",
+          "uri": "pkg:nix-fetch/crate-winnow-1.0.0.tar.gz?hash=sha256:qQ6I5GZyZKmU005tGrLSbTmNzcqLf1K+yGaJV1F/x9g="
         },
         {
           "annotations": {
@@ -3546,15 +3436,15 @@
       "byproducts": [
         {
           "digest": {
-            "sha256": "d6da62fa8519b3d50754054a951a2674e644cad8344fe5235a75672b0806e7ef"
+            "sha256": "e6b0634f26ae56a3895e41cbd5a1e6f0df7acafb962f6b21539ce664bad00398"
           },
           "name": "input_merkle_root"
         }
       ],
       "metadata": {
-        "invocationId": "build-20260305-070613-f8b88be3",
-        "startedOn": "2026-03-05T07:06:13.419328+00:00",
-        "finishedOn": "2026-03-05T07:06:13.588328+00:00"
+        "invocationId": "build-20260520-215111-83dcd3d3",
+        "startedOn": "2026-05-20T21:51:11.896078+00:00",
+        "finishedOn": "2026-05-20T21:51:12.274392+00:00"
       }
     }
   },
@@ -3562,7 +3452,7 @@
   "subject": [
     {
       "digest": {
-        "sha256": "abd66aa915e9839cef0cc33e0f0ec026259fee1ba97729ff441df4f6d421800a"
+        "sha256": "583958defd6941704c33c68e3893e0e907d4879cbb5f3e09d15d3df0b235b8ca"
       },
       "name": "alejandra"
     }

@@ -32,9 +32,9 @@
           },
           "kettle": {
             "digest": {
-              "sha256": "\npkg_version:0.1.1\nbranch:\ncommit_hash:\nbuild_time:2026-05-06 08:35:09 +00:00\nbuild_env:rustc 1.94.0 (4a4ef493e 2026-03-02) (built from a source tarball),"
+              "sha256": "2e8e398fce4dfb04f1dad4555908b48c08909a3a2dcb026d8a82874556e942ff"
             },
-            "version": "\npkg_version:0.1.1\nbranch:\ncommit_hash:\nbuild_time:2026-05-06 08:35:09 +00:00\nbuild_env:rustc 1.94.0 (4a4ef493e 2026-03-02) (built from a source tarball),"
+            "version": "1.0.0"
           }
         }
       },
@@ -53,9 +53,9 @@
         }
       ],
       "metadata": {
-        "invocationId": "build-20260506-095957-2f3799da",
-        "startedOn": "2026-05-06T09:59:57.341913+00:00",
-        "finishedOn": "2026-05-06T09:59:57.397699+00:00"
+        "invocationId": "build-20260520-215239-dde1b50e",
+        "startedOn": "2026-05-20T21:52:39.233053+00:00",
+        "finishedOn": "2026-05-20T21:52:39.303931+00:00"
       }
     }
   },

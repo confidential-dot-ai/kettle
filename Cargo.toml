@@ -1,12 +1,16 @@
 [package]
 name = "kettle"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
-repository = "https://github.com/lunal-dev/kettle"
+repository = "https://github.com/confidential-dot-ai/kettle"
 build = "build.rs"
 
 [features]
+# Enables shadow-rs build metadata used by the CLI binary. Off by default so
+# library consumers skip the shadow build step; the bin/ scripts pass it explicitly.
+cli = []
 attest = ["attestation/attest"]
+server = ["dep:axum", "dep:tar", "dep:zip", "dep:dashmap", "dep:tempfile", "dep:tokio-stream", "dep:futures-util", "dep:tokio-util"]
 
 [dependencies]
 anyhow = "1.0.101"
@@ -44,7 +48,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde-big-array = "0.5.1"
 serde_bytes = "0.11.19"
 serde_json = { version = "1.0.149", features = ["preserve_order"] }
-sev = { git = "https://github.com/virtee/sev", version = "7.1.0", features = [
+sev = { git = "https://github.com/virtee/sev", version = "8.0.0", features = [
     "crypto_nossl",
     "serde",
     "snp",
@@ -58,8 +62,8 @@ thiserror = "2.0.18"
 x509-cert = { version = "0.2.5", features = ["std"] }
 uuid = { version = "1.21.0", features = ["v4"] }
 rs_merkle = "1.5.0"
-attestation = { git = "https://github.com/lunal-dev/attestation-rs", branch = "usize", version = "0.4.0" }
-tokio = { version = "1.49.0", features = ["rt-multi-thread"] }
+attestation = { git = "https://github.com/confidential-dot-ai/attestation-rs", branch = "wasm-verify", version = "0.4.0" }
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "fs"] }
 tracing = "0.1.44"
 clap-verbosity-flag = { version = "3.0.4", default-features = false, features = [
     "tracing",
@@ -68,13 +72,40 @@ tracing-subscriber = { version = "=0.3.19", features = ["tracing"] }
 shadow-rs = { version = "1.7.1", default-features = false }
 serde_yaml = "0.9.34"
 pretty_assertions = "1.4.1"
+axum = {version = "0.8.9", optional = true}
+tar = {version = "0.4.45", optional = true}
+zip = { version = "2.2", default-features = false, features = ["deflate"], optional = true }
+dashmap = { version = "6", optional = true }
+tempfile = { version = "3", optional = true }
+tokio-stream = { version = "0.1", features = ["sync"], optional = true }
+reqwest-eventsource = { version = "0.6", optional = true }
+tower-http = { version = "0.6", features = ["fs", "trace"], optional = true }
+serde_with = { version = "3", features = ["base64"] }
+futures-util = { version = "0.3", optional = true }
+futures = "0.3"
+tokio-util = { version = "0.7", features = ["io"], optional = true }
+sysinfo = { version = "0.32", optional = true }
+igvm-tools = { version = "0.2.0", path = "crates/igvm-tools", default-features = false }
+igvm = "0.4.0"
+
+[[bin]]
+name = "kettle-server"
+required-features = ["server"]
 
 [dev-dependencies]
 tempfile = "3"
 regex-lite = "0.1"
+tower = "0.5"
+rand = "0.9"
 
 [build-dependencies]
 shadow-rs = "1.7.1"
+
+# Optimize the SHA crate even in debug builds. The SNP IGVM launch measurement
+# (igvm-tools::measure) runs two SHA-384 hashes per guest page; unoptimized it
+# dominates `kettle verify` (~8s vs ~0.2s). Keeps our own code in debug.
+[profile.dev.package.sha2]
+opt-level = 3
 
 # The profile that 'dist' will build with
 [profile.dist]

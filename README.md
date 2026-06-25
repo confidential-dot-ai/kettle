@@ -44,7 +44,7 @@ Kettle is available from GitHub Releases or from source via Cargo, the Rust buil
 ### From GitHub Releases
 
 ```bash
-curl -LO https://github.com/lunal-dev/kettle/releases/latest/download/kettle-installer.sh
+curl -LO https://github.com/confidential-dot-ai/kettle/releases/latest/download/kettle-installer.sh
 # don't forget to read the source before you run random scripts from the internet :)
 bash kettle-installer.sh
 ```
@@ -54,14 +54,14 @@ bash kettle-installer.sh
 To install Kettle, first [install Rust](https://rustup.rs), and then use Cargo to build and install:
 
 ```bash
-cargo install --git https://github.com/lunal-dev/kettle
+cargo install --git https://github.com/confidential-dot-ai/kettle
 ```
 
 If you are running inside a TEE, you will need to install OS packages for attestation, and then enable the `attest` feature flag. Here's an example for Ubuntu Linux:
 
 ```bash
 apt-get install -y libtss2-dev
-cargo install --features attest --git https://github.com/lunal-dev/kettle
+cargo install --features attest --git https://github.com/confidential-dot-ai/kettle
 ```
 
 ### Reproducible build
@@ -69,7 +69,7 @@ cargo install --features attest --git https://github.com/lunal-dev/kettle
 Every release of Kettle includes a full reproducible binary, with support for attestation, built inside a fully reproducible environment in Docker. Download and use the fully reproducible binary by running:
 
 ```bash
-curl -LO https://github.com/lunal-dev/kettle/releases/latest/download/kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz
+curl -LO https://github.com/confidential-dot-ai/kettle/releases/latest/download/kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz
 tar xfvj kettle-reproducible-x86_64-unknown-linux-gnu.tar.xz 
 chmod +x kettle
 ./kettle attest
@@ -119,6 +119,19 @@ Verify the attested build created above like this:
 
 ```bash
 kettle verify ripgrep/kettle-build
+```
+
+Two optional flags tie the attestation to the exact VM image that produced it:
+
+- `--igvm <FILE>` — verify that the attested launch measurement matches this IGVM
+  file's launch digest, proving the build ran in a confidential VM booted from
+  exactly this IGVM.
+- `--image <FILE>` — verify that the dm-verity roothash committed inside the IGVM
+  matches the roothash stored in this disk image (`disk.raw`), binding the
+  verified IGVM to a specific root filesystem. Requires `--igvm`.
+
+```bash
+kettle verify ripgrep/kettle-build --igvm guest.igvm --image disk.raw
 ```
 
 ## Supported toolchains

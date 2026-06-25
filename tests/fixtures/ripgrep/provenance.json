@@ -7,10 +7,10 @@
         "buildCommand": "cargo build",
         "source": {
           "digest": {
-            "gitCommit": "cb66736f146f093497f4dc537b33d0826f9af33c",
-            "gitTree": "094dcbeda19d90732a477acc2dd3c80b87ea96f4"
+            "gitCommit": "4519153e5e461527f4bca45b042fff45c4ec6fb9",
+            "gitTree": "0e1c3a9e3e85a65799d9dbf15aa4743ad18cbc3f"
           },
-          "uri": "https://github.com/burntsushi/ripgrep.git"
+          "uri": "https://github.com/burntsushi/ripgrep"
         }
       },
       "internalParameters": {
@@ -32,9 +32,9 @@
           },
           "kettle": {
             "digest": {
-              "sha256": "be54407b39e0d0680fafbc0f6eeac1cc0b91292589e1284ae307f950652bccad"
+              "sha256": "2e8e398fce4dfb04f1dad4555908b48c08909a3a2dcb026d8a82874556e942ff"
             },
-            "version": "kettle 0.1.0"
+            "version": "1.0.0"
           }
         }
       },
@@ -405,15 +405,15 @@
       "byproducts": [
         {
           "digest": {
-            "sha256": "4e212fbcea6f5cb48a7882517efa90d53e287c8e5083a0761c565db65d1228f2"
+            "sha256": "5deb8d3000e179a407d8627b2d4a201f0fb81bb11f1bcd9dff7b42180e029805"
           },
           "name": "input_merkle_root"
         }
       ],
       "metadata": {
-        "invocationId": "build-20260305-070604-f76e0da8",
-        "startedOn": "2026-03-05T07:06:04.269222+00:00",
-        "finishedOn": "2026-03-05T07:06:05.267348+00:00"
+        "invocationId": "build-20260520-215052-17223ff8",
+        "startedOn": "2026-05-20T21:50:52.083557+00:00",
+        "finishedOn": "2026-05-20T21:50:56.455535+00:00"
       }
     }
   },
@@ -421,7 +421,7 @@
   "subject": [
     {
       "digest": {
-        "sha256": "f1490f2d73c0cedda6eb2e53e862bef439308168904ad9a8009be705e71878ad"
+        "sha256": "bdd19eb82593e5c956660470e3f0aa29c79d8929db55bcdff31230d836c31f2a"
       },
       "name": "rg"
     }

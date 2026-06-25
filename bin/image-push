@@ -1,0 +1,24 @@
+#!/bin/bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+# push built image to GHCR
+(
+    cd "$REPO_ROOT/target/image"
+    rm -f ghcr-manifest.json
+    oras push "ghcr.io/confidential-dot-ai/kettle-build:latest" ./* \
+    --annotation "org.opencontainers.image.url=https://ghcr.io/confidential-dot-ai/kettle-build" \
+    --annotation "org.opencontainers.image.source=https://github.com/confidential-dot-ai/kettle" \
+    --artifact-type application/vnd.steep.base.v1 \
+    --export-manifest ghcr-manifest.json
+
+    # Assert the registry resolves the manifest by the same digest the
+    # orchestrator computes at runtime (sha256 of the exported manifest bytes,
+    # surfaced via GET /config). Catches any registry/runtime digest divergence
+    # here at deploy time rather than later via a kettle verify mismatch.
+    DIGEST="sha256:$(sha256sum ghcr-manifest.json | cut -d' ' -f1)"
+    oras manifest fetch "ghcr.io/confidential-dot-ai/kettle-build@${DIGEST}" >/dev/null
+    echo "verified pushed image digest: ghcr.io/confidential-dot-ai/kettle-build@${DIGEST}"
+)

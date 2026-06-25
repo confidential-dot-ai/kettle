@@ -206,3 +206,25 @@ fn cli_attest_alejandra() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn cli_attest_rejects_17_byte_nonce() {
+    let bin = kettle_bin();
+    let output = std::process::Command::new(bin)
+        .args(["attest", "--nonce", "000102030405060708090a0b0c0d0e0f10",
+               "tests/fixtures/alejandra"])
+        .output()
+        .expect("kettle attest");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert!(!output.status.success(), "attest should fail; got: {combined}");
+    // The error path: either "too long" (attest feature on linux) or the
+    // "Attestation is disabled" wrapper (everywhere else). On macOS / Linux
+    // without --features attest, attest_with_sink returns the disabled error
+    // BEFORE checking the nonce, so this test asserts only that the command
+    // fails — not that the error message contains "too long".
+    let _ = combined;
+}

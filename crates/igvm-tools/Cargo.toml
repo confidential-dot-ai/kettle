@@ -1,0 +1,30 @@
+[package]
+name = "igvm-tools"
+version = "0.2.0"
+edition = "2021"
+description = "Build and measure IGVM files for confidential VMs"
+license = "Apache-2.0"
+
+[lib]
+name = "igvm_tools"
+
+[[bin]]
+name = "igvm-tools"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+cli = ["dep:clap", "dep:chrono"]
+
+[dependencies]
+igvm = "0.4"
+igvm_defs = "0.4"
+clap = { version = "4", features = ["derive"], optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+zerocopy = { version = "0.8", features = ["derive"] }
+bitfield-struct = "0.10"
+uguid = "2"
+chrono = { version = "0.4", features = ["serde"], optional = true }

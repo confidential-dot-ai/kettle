@@ -2,11 +2,11 @@ name: Test
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   merge_group:
-    types: [ checks_requested ]
+    types: [checks_requested]
   workflow_dispatch:
 
 permissions: read-all
@@ -71,21 +71,26 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
-      - run: cargo build --release
+      - run: cargo build --release --features cli,server --bin kettle --bin kettle-server
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kettle
           path: target/release/kettle
           if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kettle-server
+          path: target/release/kettle-server
+          if-no-files-found: error
 
   build-projects:
-    needs: [ build ]
+    needs: [build]
     name: Build ${{ matrix.project }} with Kettle
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        project: [ ripgrep, eza, openclaw, kettle ]
+        project: [ripgrep, eza, openclaw, kettle]
         include:
           - project: ripgrep
             owner: burntsushi

@@ -1,7 +1,11 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context as _, Result, anyhow};
 use rs_merkle::MerkleTree;
 use sha2::{Digest as _, Sha256};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use tracing::debug;
 
 use crate::provenance::{
@@ -11,7 +15,68 @@ use crate::provenance::{
 
 use super::driver::{Artifact, BuildMetadata, GitContext, ProvenanceFields, ToolchainDriver};
 
-pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(path: &PathBuf) -> Result<()> {
+/// Spawn `cmd`, pipe its stdout/stderr through `BufReader::lines`, and emit each
+/// line as `Event::Build` on `sink`. Returns the captured stdout bytes (each
+/// line as emitted, joined with '\n'). Stderr is emitted but not captured.
+///
+/// Fails if the child does not exit successfully OR if reading either pipe
+/// errors mid-stream. The latter is required because callers (notably nix)
+/// parse stdout for artifact discovery — silently truncating it would
+/// produce incorrect provenance.
+pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSink) -> Result<Vec<u8>> {
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.spawn().context("failed to spawn child")?;
+    let stdout = child.stdout.take().expect("piped");
+    let stderr = child.stderr.take().expect("piped");
+
+    let stdout_buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+
+    let sink_out = sink.clone();
+    let stdout_buf_c = stdout_buf.clone();
+    let stdout_thread = thread::spawn(move || -> std::io::Result<()> {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            let line = line?;
+            {
+                let mut buf = stdout_buf_c.lock().unwrap();
+                buf.extend_from_slice(line.as_bytes());
+                buf.push(b'\n');
+            }
+            sink_out.try_emit(crate::api::Event::Build { msg: line });
+        }
+        Ok(())
+    });
+    let sink_err = sink.clone();
+    let stderr_thread = thread::spawn(move || -> std::io::Result<()> {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            let line = line?;
+            sink_err.try_emit(crate::api::Event::Build { msg: line });
+        }
+        Ok(())
+    });
+
+    let status = child.wait().context("waiting for child")?;
+    let stdout_result = stdout_thread.join()
+        .map_err(|_| anyhow!("stdout reader thread panicked"))?;
+    let stderr_result = stderr_thread.join()
+        .map_err(|_| anyhow!("stderr reader thread panicked"))?;
+    stdout_result.context("reading child stdout")?;
+    stderr_result.context("reading child stderr")?;
+    if !status.success() {
+        return Err(anyhow!("child exited unsuccessfully (exit {:?})", status.code()));
+    }
+    let buf = Arc::try_unwrap(stdout_buf)
+        .expect("reader threads joined; only one Arc remains")
+        .into_inner()
+        .unwrap_or_else(|e| e.into_inner());
+    Ok(buf)
+}
+
+pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(
+    path: &PathBuf,
+    sink: &crate::toolchain::EventSink,
+) -> Result<()> {
     debug!("input dir: {:?}", path);
 
     // 1. Clean / create output dir
@@ -40,8 +105,15 @@ pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(path: &PathBuf) -> Resul
     debug!("build metadata: {:?}", build_metadata);
 
     // 6. Run build
-    println!("Running `{}`", T::build_command_display());
-    let build_output = T::run_build(path)?;
+    let cmd_display = T::build_command_display();
+    println!("Running `{}`", cmd_display);
+    sink.try_emit(crate::api::Event::Build {
+        msg: format!("Running `{}`", cmd_display),
+    });
+    let build_output = T::run_build(path, sink)?;
+    sink.try_emit(crate::api::Event::Build {
+        msg: "Build command finished".into(),
+    });
 
     // 7. Collect artifacts (each impl stages into artifacts_dir itself)
     let artifacts_dir = output_dir.join("artifacts");
@@ -61,6 +133,9 @@ pub(crate) fn run<T: ToolchainDriver + std::fmt::Debug>(path: &PathBuf) -> Resul
         output_dir.join("provenance.json"),
         serde_json::to_string_pretty(&provenance)?,
     )?;
+    sink.try_emit(crate::api::Event::Provenance {
+        msg: "Wrote provenance.json".into(),
+    });
 
     println!(
         "Build in {:?} complete, output located in `kettle-build`",

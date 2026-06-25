@@ -22,11 +22,11 @@ impl Provenance {
     }
 
     pub fn to_json(&self) -> String {
-        serde_json::to_string(&self).expect("could not generate JSON")
+        serde_json::to_string_pretty(&self).expect("could not generate JSON")
     }
 
     pub fn checksum(&self) -> Vec<u8> {
-        Sha256::digest(self.to_json().trim_end()).to_vec()
+        Sha256::digest(self.to_json()).to_vec()
     }
 
     pub fn toolchain(&self) -> &Toolchain {
@@ -789,19 +789,19 @@ mod tests {
     #[test]
     fn accessor_build_id() {
         let p = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        assert_eq!(p.build_id(), "build-20260305-070604-f76e0da8");
+        assert_eq!(p.build_id(), "build-20260520-215052-17223ff8");
     }
 
     #[test]
     fn accessor_timestamp() {
         let p = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        assert_eq!(p.timestamp(), "2026-03-05T07:06:04.269222+00:00");
+        assert_eq!(p.timestamp(), "2026-05-20T21:50:52.083557+00:00");
     }
 
     #[test]
     fn accessor_git_commit() {
         let p = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        assert_eq!(p.git_commit(), "cb66736f146f093497f4dc537b33d0826f9af33c");
+        assert_eq!(p.git_commit(), "4519153e5e461527f4bca45b042fff45c4ec6fb9");
     }
 
     // --- Toolchain Display ---
@@ -865,7 +865,6 @@ mod tests {
     fn key_ordering_matches_when_regenerated_pnpm() {
         let p = Provenance::from_json(PNPM_FIXTURE).unwrap();
         let regenerated = serde_json::to_string_pretty(&p).unwrap();
-        let _ = fs_err::write("regenerated.json", &regenerated);
         assert_eq!(
             String::from_utf8_lossy(PNPM_FIXTURE),
             String::from_utf8_lossy(regenerated.as_bytes()),

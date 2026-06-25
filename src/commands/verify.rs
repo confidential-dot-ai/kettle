@@ -2,7 +2,7 @@ use anyhow::Result;
 use attestation::VerificationResult;
 use colored::Colorize;
 use fs_err::DirEntry;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use tabled::builder::Builder;
 use tabled::settings::object::Columns;
@@ -21,11 +21,22 @@ pub struct VerifyArgs {
     /// Can be up to 16 bytes.
     #[arg(short, long)]
     nonce: Option<String>,
+    /// Path to the IGVM file the CVM booted from. When set, verifies that the
+    /// attested launch measurement matches this IGVM's launch digest.
+    #[arg(long)]
+    igvm: Option<PathBuf>,
+    /// Path to the disk image (disk.raw). When set, verifies that the dm-verity
+    /// roothash committed inside the IGVM matches the disk's stored roothash.
+    /// Requires --igvm.
+    #[arg(long, requires = "igvm")]
+    image: Option<PathBuf>,
 }
 
 pub async fn verify(args: VerifyArgs) -> Result<()> {
     let path = args.path;
     let nonce = args.nonce;
+    let igvm = args.igvm;
+    let image = args.image;
     let build = Build::from_dir(&path)?;
 
     // Get the provenance and attestation
@@ -41,13 +52,19 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     if let Some(nonce) = nonce {
         results.push(verify_nonce(&verification, nonce));
     }
+    if let Some(igvm_path) = &igvm {
+        results.push(verify_igvm_measurement(&verification, igvm_path));
+    }
+    if let (Some(igvm_path), Some(image_path)) = (&igvm, &image) {
+        results.push(verify_image_roothash(igvm_path, image_path));
+    }
 
     // Print build information
     print_table(
         vec![format!(
             "\n{} {}\n",
             "Verifying build dir".bold(),
-            &path.file_name().unwrap().to_string_lossy()
+            build_dir_name(&path)
         )],
         vec![
             vec!["Build ID".bold().to_string(), provenance.build_id().clone()],
@@ -116,6 +133,17 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     Ok(())
 }
 
+/// Best-effort human-readable name for the build directory being verified.
+/// `Path::file_name` returns `None` for paths ending in `.`/`..` or the root
+/// (e.g. `kettle verify .`), so canonicalize first to recover the real
+/// directory name, falling back to the path as given.
+fn build_dir_name(path: &Path) -> String {
+    fs_err::canonicalize(path)
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
 fn verify_nonce(verification_result: &VerificationResult, nonce_string: String) -> Verification {
     let nonce = hex::decode(nonce_string).unwrap();
     if let Some(signed_data) = &verification_result.claims.signed_data.split_at_checked(32) {
@@ -160,6 +188,95 @@ fn verify_signature(verification_result: &VerificationResult) -> Verification {
     }
 }
 
+/// Compare a measured IGVM launch digest (hex) against the attested one.
+/// Both are SHA-384 hex strings; comparison is case-insensitive.
+fn compare_launch_digest(measured_hex: &str, attested_hex: &str) -> Verification {
+    if measured_hex.eq_ignore_ascii_case(attested_hex) {
+        Verification::success("IGVM launch measurement matches attestation")
+    } else {
+        Verification::failure(
+            "IGVM launch measurement mismatch",
+            &format!(
+                "IGVM file launch digest   {measured_hex}\nAttested launch digest    {attested_hex}",
+            ),
+        )
+    }
+}
+
+/// Measure the given IGVM file and compare its SNP launch digest to the
+/// attested launch measurement. Any parse/measure error is reported as a
+/// verification failure rather than aborting the whole `verify` run.
+fn verify_igvm_measurement(
+    verification_result: &VerificationResult,
+    igvm_path: &Path,
+) -> Verification {
+    let bytes = match fs_err::read(igvm_path) {
+        Ok(b) => b,
+        Err(e) => return Verification::failure("Could not read IGVM file", &e.to_string()),
+    };
+    let igvm_file = match igvm::IgvmFile::new_from_binary(&bytes, None) {
+        Ok(f) => f,
+        Err(e) => return Verification::failure("Could not parse IGVM file", &e.to_string()),
+    };
+    let measured = match igvm_tools::measure::measure_snp(&igvm_file, false) {
+        Ok(r) => hex::encode(r.launch_digest),
+        Err(e) => return Verification::failure("Could not measure IGVM file", &e),
+    };
+    compare_launch_digest(&measured, &verification_result.claims.launch_digest)
+}
+
+/// Pull the `roothash=<hex>` value out of a kernel command line.
+fn roothash_from_cmdline(cmdline: &str) -> Result<String, String> {
+    cmdline
+        .split_whitespace()
+        .find_map(|tok| tok.strip_prefix("roothash="))
+        .map(|s| s.to_string())
+        .ok_or_else(|| "no roothash= in IGVM kernel command line".to_string())
+}
+
+/// Compare the roothash committed in the IGVM against the disk's stored roothash.
+fn compare_roothash(igvm_roothash: &str, disk_roothash: &str) -> Verification {
+    if igvm_roothash.eq_ignore_ascii_case(disk_roothash) {
+        Verification::success("Disk image matches IGVM dm-verity roothash")
+    } else {
+        Verification::failure(
+            "Disk image roothash mismatch",
+            &format!(
+                "IGVM-committed roothash   {igvm_roothash}\nDisk image roothash       {disk_roothash}",
+            ),
+        )
+    }
+}
+
+/// Verify that the dm-verity roothash committed inside the IGVM matches the
+/// roothash stored in the disk image. Reported as a verification failure (never
+/// a panic) on any structural problem.
+fn verify_image_roothash(igvm_path: &Path, image_path: &Path) -> Verification {
+    let bytes = match fs_err::read(igvm_path) {
+        Ok(b) => b,
+        Err(e) => return Verification::failure("Could not read IGVM file", &e.to_string()),
+    };
+    let igvm_file = match igvm::IgvmFile::new_from_binary(&bytes, None) {
+        Ok(f) => f,
+        Err(e) => return Verification::failure("Could not parse IGVM file", &e.to_string()),
+    };
+    let cmdline = match igvm_tools::extract::kernel_cmdline(&igvm_file) {
+        Ok(c) => c,
+        Err(e) => return Verification::failure("Could not read IGVM kernel command line", &e),
+    };
+    let igvm_roothash = match roothash_from_cmdline(&cmdline) {
+        Ok(r) => r,
+        Err(e) => return Verification::failure("No roothash in IGVM", &e),
+    };
+    let disk_roothash = match crate::verity::stored_roothash(image_path) {
+        Ok(r) => r,
+        Err(e) => {
+            return Verification::failure("Could not read disk image roothash", &e.to_string())
+        }
+    };
+    compare_roothash(&igvm_roothash, &disk_roothash)
+}
+
 fn verify_provenance(
     verification_result: &VerificationResult,
     provenance: &Provenance,
@@ -171,7 +288,7 @@ fn verify_provenance(
                 message: "Attested checksum invalid".to_string(),
                 details: format!(
                     "Expected attestation checksum {:?} to be 32 bytes",
-                    signed_checksum
+                    hex::encode(signed_checksum)
                 ),
             };
         }
@@ -182,7 +299,7 @@ fn verify_provenance(
                 message: "Provenance checksum invalid".to_string(),
                 details: format!(
                     "Expected provenance.json checksum {:?} to be 32 bytes",
-                    checksum
+                    hex::encode(checksum)
                 ),
             };
         }
@@ -193,7 +310,8 @@ fn verify_provenance(
                 "Provenance checksum mismatch",
                 &format!(
                     "Expected provenance.json checksum {:?}\nActual provenance.json checksum   {:?}",
-                    signed_data, checksum
+                    hex::encode(signed_checksum),
+                    hex::encode(checksum)
                 ),
             ),
         }
@@ -381,6 +499,23 @@ mod tests {
     }
 
     #[test]
+    fn verify_provenance_mismatch_shows_attested_checksum() {
+        let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
+        let signed_data = vec![0xab; 32];
+        let vr = make_verification_result(true, signed_data);
+        match verify_provenance(&vr, &provenance) {
+            Verification::Failure { message, details } => {
+                assert!(message.contains("mismatch"), "message: {message}");
+                assert!(
+                    details.contains(&"ab".repeat(32)),
+                    "details should show the attested checksum hex: {details}"
+                );
+            }
+            Verification::Success { .. } => panic!("expected failure"),
+        }
+    }
+
+    #[test]
     fn verify_signed_nonce() {
         assert_verify_nonce("");
         assert_verify_nonce("aa");
@@ -542,5 +677,92 @@ mod tests {
 
         let build = Build::from_dir(&tmp.path().to_path_buf()).unwrap();
         assert!(build.artifacts.is_empty());
+    }
+
+    // --- build_dir_name ---
+
+    #[test]
+    fn build_dir_name_for_dot_resolves_real_name() {
+        let tmp = TempDir::new().unwrap();
+        let nested = tmp.path().join("my-build");
+        fs_err::create_dir(&nested).unwrap();
+        // `.` has no `file_name()` component; this used to panic.
+        let prev = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&nested).unwrap();
+        let name = build_dir_name(Path::new("."));
+        std::env::set_current_dir(prev).unwrap();
+        assert_eq!(name, "my-build");
+    }
+
+    #[test]
+    fn build_dir_name_for_named_dir() {
+        let tmp = TempDir::new().unwrap();
+        let nested = tmp.path().join("trustee");
+        fs_err::create_dir(&nested).unwrap();
+        assert_eq!(build_dir_name(&nested), "trustee");
+    }
+
+    #[test]
+    fn build_dir_name_falls_back_for_nonexistent_path() {
+        // canonicalize fails, so we fall back to the path as given.
+        assert_eq!(build_dir_name(Path::new("does-not-exist")), "does-not-exist");
+    }
+
+    // --- verify_igvm_measurement (digest comparison) ---
+
+    #[test]
+    fn igvm_measurement_match() {
+        let digest = "ab".repeat(48); // 96-char hex of a 48-byte (SHA-384) digest
+        match compare_launch_digest(&digest, &digest.to_uppercase()) {
+            Verification::Success { message } => assert!(message.contains("launch measurement")),
+            Verification::Failure { message, .. } => panic!("expected success: {message}"),
+        }
+    }
+
+    #[test]
+    fn igvm_measurement_mismatch_shows_both() {
+        let measured = "ab".repeat(48);
+        let attested = "cd".repeat(48);
+        match compare_launch_digest(&measured, &attested) {
+            Verification::Failure { message, details } => {
+                assert!(message.contains("mismatch"), "message: {message}");
+                assert!(details.contains(&measured) && details.contains(&attested));
+            }
+            Verification::Success { .. } => panic!("expected failure"),
+        }
+    }
+
+    // --- roothash_from_cmdline ---
+
+    #[test]
+    fn roothash_from_cmdline_extracts_hex() {
+        let cmd = "console=hvc0 roothash=abc123def systemd.condition-first-boot=no";
+        assert_eq!(roothash_from_cmdline(cmd).unwrap(), "abc123def");
+    }
+
+    #[test]
+    fn roothash_from_cmdline_missing() {
+        assert!(roothash_from_cmdline("console=hvc0 quiet").is_err());
+    }
+
+    // --- compare_roothash ---
+
+    #[test]
+    fn compare_roothash_match() {
+        match compare_roothash("deadbeef", "DEADBEEF") {
+            Verification::Success { message } => assert!(message.contains("roothash")),
+            Verification::Failure { message, .. } => panic!("expected success: {message}"),
+        }
+    }
+
+    #[test]
+    fn compare_roothash_mismatch_shows_both() {
+        match compare_roothash("aaaa", "bbbb") {
+            Verification::Failure { message, details } => {
+                assert!(message.contains("mismatch"));
+                assert!(details.contains("aaaa") && details.contains("bbbb"));
+            }
+            Verification::Success { .. } => panic!("expected failure"),
+        }
     }
 }

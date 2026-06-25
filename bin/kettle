@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Match options to rust-analyzer so we stop fighting
-export RUSTC_BOOTSTRAP=1
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
 if [[ "$(cat /sys/devices/virtual/dmi/id/chassis_asset_tag 2>/dev/null)" == "7783-7084-3265-9085-8269-3286-77" ]]; then
   AZURE_SECURITY_TYPE="$(curl -s -H Metadata:true 'http://169.254.169.254/metadata/instance?api-version=2023-07-01' | jq .compute.securityProfile.securityType -r)"
@@ -13,8 +13,8 @@ fi
 
 if [[ -n "${ATTEST:-}" ]]; then
   set -x
-  cargo run --features attest -- "$@"
+  cargo run --features cli,attest --bin kettle -- "$@"
 else
   set -x
-  cargo run -- "$@"
+  cargo run --features cli --bin kettle -- "$@"
 fi

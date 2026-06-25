@@ -26,16 +26,23 @@ impl ProjectToolchain {
 }
 
 pub fn build(path: &PathBuf) -> Result<()> {
+    build_with_sink(path, &crate::toolchain::EventSink::noop())
+}
+
+pub fn build_with_sink(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Result<()> {
     println!("Building project in: {:?}", path);
 
     let toolchain = ProjectToolchain::from_dir(path)?;
     println!("Found {:?} project", toolchain);
-    match toolchain {
-        ProjectToolchain::Cargo => crate::toolchain::cargo::build(path)?,
-        ProjectToolchain::Nix => crate::toolchain::nix::build(path)?,
-        ProjectToolchain::Pnpm => crate::toolchain::pnpm::build(path)?,
-    }
+    sink.try_emit(crate::api::Event::Detect {
+        msg: format!("Detected {:?} project", toolchain),
+    });
 
+    match toolchain {
+        ProjectToolchain::Cargo => crate::toolchain::cargo::build(path, sink)?,
+        ProjectToolchain::Nix => crate::toolchain::nix::build(path, sink)?,
+        ProjectToolchain::Pnpm => crate::toolchain::pnpm::build(path, sink)?,
+    }
     Ok(())
 }
 

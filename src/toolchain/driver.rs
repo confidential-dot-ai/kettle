@@ -7,6 +7,7 @@ use tracing::debug;
 
 use crate::provenance::{InternalParameters, ResolvedDependency};
 
+#[cfg(feature = "cli")]
 shadow_rs::shadow!(binary);
 
 // --- Moved from toolchain.rs ---
@@ -138,16 +139,14 @@ impl ToolBinaryInfo {
             .with_context(|| format!("{cmd} not found"))?;
         let version = String::from_utf8(ver.stdout)?.trim().to_string();
 
-        let mut which = Command::new("rustup")
-            .args(["which", cmd])
-            .output()
-            .with_context(|| format!("rustup which {cmd} failed"))?;
-        if which.stdout.is_empty() {
-            which = Command::new("which")
+        let rustup = Command::new("rustup").args(["which", cmd]).output().ok();
+        let which = match rustup {
+            Some(out) if !out.stdout.is_empty() => out,
+            _ => Command::new("which")
                 .arg(cmd)
                 .output()
-                .with_context(|| format!("which {cmd} failed"))?;
-        }
+                .with_context(|| format!("which {cmd} failed"))?,
+        };
         let bin = PathBuf::from(String::from_utf8(which.stdout)?.trim().to_string());
         let sha256 = hex::encode(Sha256::digest(fs_err::read(&bin)?));
         Ok(Self { version, sha256 })
@@ -177,8 +176,12 @@ impl ToolBinaryInfo {
     }
 
     pub(crate) fn kettle_info() -> Result<Self> {
-        let version = binary::VERSION.to_string();
-        let sha256 = binary::VERSION.to_string();
+        #[cfg(feature = "cli")]
+        let version = binary::PKG_VERSION.to_string();
+        #[cfg(not(feature = "cli"))]
+        let version = env!("CARGO_PKG_VERSION").to_string();
+        let bin = std::env::current_exe().context("locating current kettle binary")?;
+        let sha256 = hex::encode(Sha256::digest(fs_err::read(&bin)?));
         Ok(Self { version, sha256 })
     }
 }
@@ -187,8 +190,10 @@ pub(crate) trait ToolchainDriver: Sized {
     /// Lockfile filename relative to the project root (e.g. "Cargo.lock", "flake.lock").
     fn lockfile_filename() -> &'static str;
 
-    /// Human-readable build invocation for printing (e.g. "cargo build --locked --release").
-    fn build_command_display() -> &'static str;
+    /// Exact build invocation that `run_build` executes, joined for display
+    /// and the provenance `buildCommand` field. Must be derived from the same
+    /// args passed to the underlying `Command` so the two cannot drift.
+    fn build_command_display() -> String;
 
     /// Collect toolchain-specific inputs.
     /// Receives pre-computed git context, lockfile hash, and raw lockfile bytes.
@@ -207,7 +212,7 @@ pub(crate) trait ToolchainDriver: Sized {
     fn merkle_entries(&self, git: &GitContext, lockfile_hash: &str) -> Vec<String>;
 
     /// Run the build subprocess.
-    fn run_build(path: &Path) -> Result<BuildOutput>;
+    fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput>;
 
     /// Collect and stage artifacts into `artifacts_dir`.
     /// Returns Vec<Artifact> with `path` fields pointing into `artifacts_dir`.

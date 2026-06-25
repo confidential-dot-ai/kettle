@@ -32,9 +32,19 @@ struct FetchEntry {
     urls: Option<String>,
 }
 
-pub(crate) fn build(path: &PathBuf) -> Result<()> {
-    crate::toolchain::runner::run::<NixInputs>(path)
+pub(crate) fn build(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Result<()> {
+    crate::toolchain::runner::run::<NixInputs>(path, sink)
 }
+
+const BUILD_ARGS: &[&str] = &[
+    "build",
+    "--no-link",
+    "--print-out-paths",
+    "--extra-experimental-features",
+    "nix-command",
+    "--extra-experimental-features",
+    "flakes",
+];
 
 #[derive(Debug)]
 struct NixInputs {
@@ -53,8 +63,8 @@ impl ToolchainDriver for NixInputs {
         "flake.lock"
     }
 
-    fn build_command_display() -> &'static str {
-        "nix build --no-link --print-out-paths"
+    fn build_command_display() -> String {
+        format!("nix {}", BUILD_ARGS.join(" "))
     }
 
     fn collect_inputs(
@@ -99,29 +109,12 @@ impl ToolchainDriver for NixInputs {
         entries
     }
 
-    fn run_build(path: &Path) -> Result<BuildOutput> {
-        let output = Command::new("nix")
-            .args([
-                "build",
-                "--no-link",
-                "--print-out-paths",
-                "--extra-experimental-features",
-                "nix-command",
-                "--extra-experimental-features",
-                "flakes",
-            ])
-            .current_dir(path)
-            .output()
-            .context("failed to spawn nix")?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "nix build failed (exit {:?})",
-                output.status.code()
-            ));
-        }
-        Ok(BuildOutput {
-            stdout: output.stdout,
-        })
+    fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput> {
+        let mut cmd = Command::new("nix");
+        cmd.args(BUILD_ARGS).current_dir(path);
+        let stdout = crate::toolchain::runner::stream_command(&mut cmd, sink)
+            .map_err(|e| anyhow!("nix build failed: {}", e))?;
+        Ok(BuildOutput { stdout })
     }
 
     fn collect_artifacts(
@@ -180,7 +173,7 @@ impl ToolchainDriver for NixInputs {
 
         ProvenanceFields {
             build_type: "https://lunal.dev/kettle/nix@v1".to_string(),
-            external_build_command: "nix build".to_string(),
+            external_build_command: Self::build_command_display(),
             internal_parameters: InternalParameters {
                 evaluation: Some(evaluation),
                 flake_inputs: if flake_inputs.is_empty() {
@@ -299,7 +292,6 @@ fn extract_fixed_output_hashes(graph: &Value) -> Vec<FetchEntry> {
         let mut hash_algo = "sha256".to_string();
         let mut hash_mode: Option<String> = None;
 
-        // New format: hash stored in outputs as "sha256-<base64>" under a "hash" key
         if let Some(outputs) = outputs {
             'outer: for (_, out_spec) in outputs {
                 if let Some(hash_str) = out_spec.get("hash").and_then(|h| h.as_str()) {
@@ -316,23 +308,6 @@ fn extract_fixed_output_hashes(graph: &Value) -> Vec<FetchEntry> {
                     break 'outer;
                 }
             }
-        }
-
-        // Old format: hash stored in env as outputHash / outputHashAlgo / outputHashMode
-        if output_hash.is_none()
-            && let Some(env) = env
-            && let Some(hash) = env.get("outputHash").and_then(|h| h.as_str())
-        {
-            output_hash = Some(hash.to_string());
-            hash_algo = env
-                .get("outputHashAlgo")
-                .and_then(|a| a.as_str())
-                .unwrap_or("sha256")
-                .to_string();
-            hash_mode = env
-                .get("outputHashMode")
-                .and_then(|m| m.as_str())
-                .map(String::from);
         }
 
         let Some(output_hash) = output_hash else {
@@ -432,19 +407,83 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    const FLAKE_LOCK_FIXTURE: &[u8] = include_bytes!("../../tests/fixtures/alejandra/flake.lock");
-    const NIX_DRV: &[u8] = include_bytes!("../../tests/fixtures/alejandra/derivation.json");
+    const FLAKE_LOCK_FIXTURE: &[u8] = br#"{
+      "nodes": {
+        "root": {
+          "inputs": {
+            "nixpkgs": "nixpkgs",
+            "flake-utils": "flake-utils"
+          }
+        },
+        "nixpkgs": {
+          "locked": {
+            "narHash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          }
+        },
+        "flake-utils": {
+          "locked": {
+            "narHash": "sha256-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="
+          }
+        }
+      },
+      "root": "root",
+      "version": 7
+    }"#;
+
+    const NIX_DRV: &[u8] = br#"{
+      "derivations": {
+        "/nix/store/aaa-source.drv": {
+          "name": "source",
+          "outputs": {
+            "out": {
+              "hash": "sha256-c291cmNlaGFzaHNvdXJjZWhhc2hzb3VyY2VoYXNoCg==",
+              "method": "recursive"
+            }
+          },
+          "env": {
+            "name": "source",
+            "urls": [
+              "https://example.com/source.tar.gz",
+              "https://mirror.example.com/source.tar.gz"
+            ]
+          }
+        },
+        "/nix/store/bbb-other-fetch.drv": {
+          "name": "other-fetch",
+          "outputs": {
+            "out": {
+              "hash": "sha256-b3RoZXJoYXNob3RoZXJoYXNob3RoZXJoYXNob3RoZXI=",
+              "method": "flat"
+            }
+          },
+          "env": {
+            "name": "other-fetch",
+            "url": "https://example.com/other.patch"
+          }
+        },
+        "/nix/store/ccc-non-fixed.drv": {
+          "name": "non-fixed-output",
+          "outputs": {
+            "out": {
+              "path": "/nix/store/ddd-non-fixed"
+            }
+          },
+          "env": {
+            "name": "non-fixed-output"
+          }
+        }
+      }
+    }"#;
 
     // --- parse_flake_lock ---
 
     #[test]
     fn parse_flake_lock_happy_path() {
         let deps = parse_flake_lock(FLAKE_LOCK_FIXTURE).unwrap();
-        // Fixture has root inputs: fenix, nixpkgs
-        assert_eq!(deps.len(), 3);
+        assert_eq!(deps.len(), 2);
         // Sorted by name
-        assert_eq!(deps[0].name, "fenix");
-        assert_eq!(deps[1].name, "flakeCompat");
+        assert_eq!(deps[0].name, "flake-utils");
+        assert_eq!(deps[1].name, "nixpkgs");
         // Both should have nar_hash
         assert!(deps[0].nar_hash.is_some());
         assert!(deps[1].nar_hash.is_some());
@@ -492,36 +531,30 @@ mod tests {
         let graph: Value = serde_json::from_slice(NIX_DRV).unwrap();
         let fetches = extract_fixed_output_hashes(&graph);
         // Fixture has 2 fixed-output derivations (source, other-fetch) and 1 non-fixed
-        assert_eq!(fetches.len(), 306);
+        assert_eq!(fetches.len(), 2);
         // Sorted by name
+        assert_eq!(fetches[0].name, "other-fetch");
+        assert_eq!(fetches[1].name, "source");
+        // Hash algo split from "sha256-<base64>"
+        assert_eq!(fetches[0].output_hash_algo, "sha256");
         assert_eq!(
-            fetches[0].name,
-            "0001-Add-prototype-to-function-definitions.patch"
+            fetches[0].output_hash,
+            "b3RoZXJoYXNob3RoZXJoYXNob3RoZXJoYXNob3RoZXI="
         );
-        assert_eq!(
-            fetches[1].name,
-            "07631601e6602bc49b8eac3aab9d2b35968d3e7a.patch"
-        );
-        // Check hash algo split
-        assert_eq!(fetches[1].output_hash_algo, "sha256");
-        assert_eq!(
-            fetches[1].output_hash,
-            "A89dikDVDJGXZ702nq3MbVBfYEChaWk1bp59aDKD7kU="
-        );
-        // Check method comes from outputs
-        assert_eq!(fetches[1].output_hash_mode.as_deref(), Some("flat"));
+        // Method comes from outputs.<name>.method
         assert_eq!(fetches[0].output_hash_mode.as_deref(), Some("flat"));
-        // URL extraction
-        let with_url = fetches.iter().find(|f| f.url.is_some()).unwrap();
+        assert_eq!(fetches[1].output_hash_mode.as_deref(), Some("recursive"));
+        // URL (single, string form) from env.url
         assert_eq!(
-            with_url.url,
-            Some("https://www.python.org/ftp/python/3.13.11/Python-3.13.11.tar.xz".to_string())
+            fetches[0].url.as_deref(),
+            Some("https://example.com/other.patch")
         );
-        // URLs extraction (array form)
-        let with_urls = fetches.iter().find(|f| f.urls.is_some()).unwrap();
+        assert!(fetches[0].urls.is_none());
+        // URLs (array form) from env.urls, joined by comma
+        assert!(fetches[1].url.is_none());
         assert_eq!(
-            with_urls.urls,
-            Some("https://www.python.org/ftp/python/3.13.11/Python-3.13.11.tar.xz".to_string())
+            fetches[1].urls.as_deref(),
+            Some("https://example.com/source.tar.gz,https://mirror.example.com/source.tar.gz")
         );
     }
 
@@ -529,6 +562,8 @@ mod tests {
     fn extract_fod_non_fixed_excluded() {
         let graph: Value = serde_json::from_slice(NIX_DRV).unwrap();
         let fetches = extract_fixed_output_hashes(&graph);
+        // Fixture has 3 derivations; only the 2 with hashes should appear.
+        assert_eq!(fetches.len(), 2);
         assert!(
             fetches.iter().all(|f| f.name != "non-fixed-output"),
             "non-fixed-output derivations should be excluded"

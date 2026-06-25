@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+
+REPO="$1"
+if [[ -e "$REPO" ]]; then
+   echo "USAGE: kettle-build USERNAME/REPO"
+   exit 1
+fi
+
+DIR="/tmp/$(basename "$REPO")"
+set +x
+
+if [[ ! -d "$DIR" ]]; then
+   git clone --depth=1 "https://github.com/$REPO" "$DIR"
+fi
+bin/kettle build "$DIR"

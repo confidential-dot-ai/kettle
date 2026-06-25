@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::debug;
@@ -10,9 +10,11 @@ use crate::{
     },
 };
 
-pub(crate) fn build(path: &PathBuf) -> Result<()> {
-    crate::toolchain::runner::run::<CargoInputs>(path)
+pub(crate) fn build(path: &PathBuf, sink: &crate::toolchain::EventSink) -> Result<()> {
+    crate::toolchain::runner::run::<CargoInputs>(path, sink)
 }
+
+const BUILD_ARGS: &[&str] = &["build", "--locked", "--release"];
 
 #[derive(Debug)]
 struct CargoInputs {
@@ -31,8 +33,8 @@ impl ToolchainDriver for CargoInputs {
         "Cargo.lock"
     }
 
-    fn build_command_display() -> &'static str {
-        "cargo build --locked --release"
+    fn build_command_display() -> String {
+        format!("cargo {}", BUILD_ARGS.join(" "))
     }
 
     fn collect_inputs(
@@ -77,21 +79,12 @@ impl ToolchainDriver for CargoInputs {
         entries
     }
 
-    fn run_build(path: &Path) -> Result<BuildOutput> {
-        let output = Command::new("cargo")
-            .args(["build", "--locked", "--release"])
-            .current_dir(path)
-            .output()
-            .context("failed to spawn cargo")?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "cargo build failed (exit {:?})",
-                output.status.code()
-            ));
-        }
-        Ok(BuildOutput {
-            stdout: output.stdout,
-        })
+    fn run_build(path: &Path, sink: &crate::toolchain::EventSink) -> Result<BuildOutput> {
+        let mut cmd = Command::new("cargo");
+        cmd.args(BUILD_ARGS).current_dir(path);
+        let stdout = crate::toolchain::runner::stream_command(&mut cmd, sink)
+            .map_err(|e| anyhow!("cargo build failed: {}", e))?;
+        Ok(BuildOutput { stdout })
     }
 
     fn collect_artifacts(
@@ -117,7 +110,7 @@ impl ToolchainDriver for CargoInputs {
     fn provenance_fields(self, _git: &GitContext, _merkle_root: &str) -> ProvenanceFields {
         ProvenanceFields {
             build_type: "https://lunal.dev/kettle/cargo@v1".to_string(),
-            external_build_command: "cargo build".to_string(),
+            external_build_command: Self::build_command_display(),
             internal_parameters: InternalParameters {
                 evaluation: None,
                 flake_inputs: None,

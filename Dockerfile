@@ -20,11 +20,17 @@ ENV PKG_CONFIG_ALL_STATIC=1
 
 # Run a cargo build that explicitly targets musl, and links it statically.
 ENV RUSTFLAGS='-C target-feature=+crt-static'
-RUN cargo build --bin kettle --features attest \
+RUN cargo build \
+  --features cli,attest,server \
+  --bin kettle \
+  --bin kettle-server \
   --release --locked \
   --target x86_64-unknown-linux-musl
 
 # Copy the binary into a stage named "artifact" so it can be extracted to the host:
 #   docker build . --target=artifact --output "type=local,dest=$(pwd)/out/"
 FROM scratch AS artifact
-COPY --from=build /tmp/kettle/target/x86_64-unknown-linux-musl/release/kettle /kettle
+COPY --from=build \
+  /tmp/kettle/target/x86_64-unknown-linux-musl/release/kettle \
+  /tmp/kettle/target/x86_64-unknown-linux-musl/release/kettle-server \
+  /

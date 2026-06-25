@@ -16,6 +16,7 @@ pub struct BuildRequest {
     pub source_name: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
@@ -27,6 +28,7 @@ pub enum Event {
     Provenance { msg: String },
     Attest { msg: String },
     Complete { result: BuildResult },
+    Host { msg: String, url: Option<String> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

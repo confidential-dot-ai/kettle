@@ -68,7 +68,7 @@ tracing = "0.1.44"
 clap-verbosity-flag = { version = "3.0.4", default-features = false, features = [
     "tracing",
 ] }
-tracing-subscriber = { version = "=0.3.19", features = ["tracing"] }
+tracing-subscriber = { version = "=0.3.20", features = ["tracing"] }
 shadow-rs = { version = "1.7.1", default-features = false }
 serde_yaml = "0.9.34"
 pretty_assertions = "1.4.1"

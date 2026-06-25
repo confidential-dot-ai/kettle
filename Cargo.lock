@@ -1743,6 +1743,7 @@ dependencies = [
  "p384",
  "pem",
  "pretty_assertions",
+ "rand 0.9.4",
  "regex-lite",
  "reqwest 0.13.4",
  "reqwest-eventsource",

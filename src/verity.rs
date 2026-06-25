@@ -10,7 +10,7 @@ use std::path::Path;
 
 use fs_err::os::unix::fs::FileExt;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256, Sha512};
 
 const LBA: u64 = 512;
@@ -166,6 +166,11 @@ mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
 
+    /// A fresh random 32-byte salt. The tests don't care about the value.
+    fn random_salt() -> [u8; 32] {
+        rand::random()
+    }
+
     /// A verity partition image = 512-byte superblock (padded to 4096) followed
     /// by the root hash block at block 1.
     fn synthetic_verity_partition(salt: &[u8], root_block: &[u8; 4096]) -> Vec<u8> {
@@ -186,7 +191,7 @@ mod tests {
 
     #[test]
     fn roothash_from_verity_matches_hand_computed() {
-        let salt = [0x11u8; 32];
+        let salt = random_salt();
         let mut root_block = [0u8; 4096];
         root_block[..4].copy_from_slice(b"root");
         let part = synthetic_verity_partition(&salt, &root_block);
@@ -201,7 +206,7 @@ mod tests {
 
     #[test]
     fn roothash_rejects_bad_magic() {
-        let mut part = synthetic_verity_partition(&[0u8; 32], &[0u8; 4096]);
+        let mut part = synthetic_verity_partition(&random_salt(), &[0u8; 4096]);
         part[0] = b'X';
         assert!(roothash_from_verity_partition(&part).is_err());
     }
@@ -236,7 +241,7 @@ mod tests {
 
     #[test]
     fn stored_roothash_finds_verity_partition() {
-        let salt = [0x22u8; 32];
+        let salt = random_salt();
         let mut root_block = [0u8; 4096];
         root_block[..5].copy_from_slice(b"hello");
         let part = synthetic_verity_partition(&salt, &root_block);
@@ -258,7 +263,7 @@ mod tests {
         // needed to read the stored root hash. stored_roothash must succeed
         // even when the file ends right after the root block — i.e. it must
         // not depend on the entire declared partition being present/read.
-        let salt = [0x33u8; 32];
+        let salt = random_salt();
         let mut root_block = [0u8; 4096];
         root_block[..3].copy_from_slice(b"abc");
         let part = synthetic_verity_partition(&salt, &root_block); // 8192 bytes
@@ -308,7 +313,7 @@ mod tests {
     fn stored_roothash_handles_partition_start_beyond_disk() {
         // A verity entry whose StartingLBA points past the end of the file must
         // error, not panic (no usize underflow).
-        let part = synthetic_verity_partition(&[0u8; 32], &[0u8; 4096]);
+        let part = synthetic_verity_partition(&random_salt(), &[0u8; 4096]);
         let mut disk = synthetic_disk(40, &part);
         // Rewrite the entry's StartingLBA to a wildly out-of-range value.
         let e = 2 * 512;
@@ -324,7 +329,7 @@ mod tests {
     fn find_verity_rejects_overflowing_lba_range() {
         // EndingLBA = u64::MAX, StartingLBA = 0: last+1 would overflow. Must
         // error, not panic.
-        let part = synthetic_verity_partition(&[0u8; 32], &[0u8; 4096]);
+        let part = synthetic_verity_partition(&random_salt(), &[0u8; 4096]);
         let mut disk = synthetic_disk(40, &part);
         let e = 2 * 512;
         disk[e + 32..e + 40].copy_from_slice(&0u64.to_le_bytes()); // StartingLBA

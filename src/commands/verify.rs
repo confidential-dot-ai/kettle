@@ -36,7 +36,8 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     results.push(verify_signature(&verification));
     results.push(provenance.verify_predicate());
     results.push(verify_provenance(&verification, &provenance));
-    results.extend(provenance.verify_artifacts(&build.artifacts)?);
+    let artifact_report = provenance.verify_artifacts(&build.top_level, &build.artifacts)?;
+    results.extend(artifact_report.results);
     if let Some(nonce) = nonce {
         results.push(verify_nonce(&verification, nonce));
     }
@@ -94,6 +95,11 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
     let headers = vec![format!("{}", "Verification Results".bold())];
     let footers = vec![];
     print_table(headers, rows, footers);
+
+    // Warnings are informational and do not affect the PASSED/FAILED verdict.
+    for warning in &artifact_report.warnings {
+        eprintln!("{}", format!("⚠️  {warning}").yellow());
+    }
 
     // Print detailed information about failures (if any)
     for r in results {
@@ -205,6 +211,7 @@ fn verify_provenance(
 struct Build {
     provenance_bytes: Vec<u8>,
     evidence_bytes: Vec<u8>,
+    top_level: Vec<DirEntry>,
     artifacts: Vec<DirEntry>,
 }
 
@@ -213,17 +220,33 @@ impl Build {
         let project_dir = fs_err::canonicalize(path)?;
         let evidence_bytes = fs_err::read(project_dir.join("evidence.json"))?;
         let provenance_bytes = fs_err::read(project_dir.join("provenance.json"))?;
-        let artifacts = fs_err::read_dir(project_dir.join("artifacts"))?
+
+        // Regular files sitting directly in the build dir — e.g. a binary
+        // published by `oras` alongside provenance.json. Subdirectories such as
+        // `artifacts/` are not regular files and are excluded here.
+        let top_level = fs_err::read_dir(&project_dir)?
             .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
             .collect();
 
-        let build = Build {
-            provenance_bytes,
-            evidence_bytes,
-            artifacts,
+        // `artifacts/` is optional: classic builds use it, oras-published
+        // builds may not have it at all. Its absence is not an error.
+        let artifacts_dir = project_dir.join("artifacts");
+        let artifacts = if artifacts_dir.is_dir() {
+            fs_err::read_dir(artifacts_dir)?
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+                .collect()
+        } else {
+            vec![]
         };
 
-        Ok(build)
+        Ok(Build {
+            provenance_bytes,
+            evidence_bytes,
+            top_level,
+            artifacts,
+        })
     }
 }
 
@@ -460,6 +483,27 @@ mod tests {
         assert!(!build.provenance_bytes.is_empty());
         assert!(!build.evidence_bytes.is_empty());
         assert_eq!(build.artifacts.len(), 1);
+        // top_level holds the two regular files in the root; the artifacts/
+        // subdirectory is not a regular file and is excluded.
+        assert_eq!(build.top_level.len(), 2);
+    }
+
+    #[test]
+    fn build_from_dir_collects_top_level_binary() {
+        let tmp = TempDir::new().unwrap();
+        fs_err::write(tmp.path().join("evidence.json"), b"{}").unwrap();
+        fs_err::write(tmp.path().join("provenance.json"), CARGO_FIXTURE).unwrap();
+        // oras-style: binary dropped directly beside provenance.json, no artifacts/
+        fs_err::write(tmp.path().join("rg"), b"binary").unwrap();
+
+        let build = Build::from_dir(&tmp.path().to_path_buf()).unwrap();
+        let names: Vec<String> = build
+            .top_level
+            .iter()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.contains(&"rg".to_string()), "top_level: {names:?}");
+        assert!(build.artifacts.is_empty());
     }
 
     #[test]
@@ -479,11 +523,14 @@ mod tests {
     }
 
     #[test]
-    fn build_from_dir_missing_artifacts() {
+    fn build_from_dir_missing_artifacts_is_ok() {
+        // artifacts/ is optional now: absence is not an error.
         let tmp = TempDir::new().unwrap();
         fs_err::write(tmp.path().join("evidence.json"), b"{}").unwrap();
         fs_err::write(tmp.path().join("provenance.json"), CARGO_FIXTURE).unwrap();
-        assert!(Build::from_dir(&tmp.path().to_path_buf()).is_err());
+
+        let build = Build::from_dir(&tmp.path().to_path_buf()).unwrap();
+        assert!(build.artifacts.is_empty());
     }
 
     #[test]

@@ -2,3 +2,4 @@
 /crates/*/Cargo.lock
 /kettle-build
 /target
+.bin/

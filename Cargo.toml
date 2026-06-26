@@ -116,3 +116,10 @@ lto = "thin"
 tss-esapi-sys = { path = "crates/tss-esapi-sys" }
 tss-esapi = { path = "crates/tss-esapi" }
 az-cvm-vtpm = { path = "crates/az-cvm-vtpm" }
+
+[workspace]
+members = ["crates/cargo-bin"]
+
+[package.metadata.bin]
+cargo-nextest = { version = "0.9.138" }
+cargo-deny = { version = "0.19.9" }

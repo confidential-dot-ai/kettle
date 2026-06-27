@@ -8,13 +8,34 @@ pub struct AttestArgs {
     #[arg()]
     pub path: PathBuf,
     /// Optional nonce, as hex string, to be included in the attestation.
-    /// Can be up to 16 bytes. For a unique nonce, use e.g. `uuidgen`.
+    /// Must be exactly 16 bytes (32 hex chars). For a unique nonce, use e.g.
+    /// `uuidgen`.
     #[arg(short, long)]
     pub nonce: Option<String>,
 }
 
 pub async fn attest(args: AttestArgs) -> Result<()> {
     attest_with_sink(args, &crate::toolchain::EventSink::noop()).await
+}
+
+/// Decode a user-supplied nonce hex string into the fixed 16-byte nonce slot.
+/// Dashes are stripped first so a `uuidgen` value can be pasted directly. The
+/// nonce must be exactly 16 bytes so it always fills the slot completely; a
+/// fixed width means trailing zero bytes can never reduce its randomness (see
+/// the `NONCE_LEN` note in `commands::verify`).
+// Only called from `attest_with_sink` (attest + linux) and the tests below; on
+// other targets it is exercised solely by tests, so it looks dead to a plain
+// non-test build.
+#[cfg_attr(not(all(feature = "attest", target_os = "linux")), allow(dead_code))]
+fn decode_nonce(nonce_string: &str) -> Result<[u8; 16]> {
+    let bytes = hex::decode(nonce_string.replace('-', ""))?;
+    bytes.as_slice().try_into().map_err(|_| {
+        anyhow!(
+            "Nonce {} must be exactly 16 bytes (32 hex chars); got {} bytes",
+            nonce_string,
+            bytes.len()
+        )
+    })
 }
 
 #[cfg(all(feature = "attest", target_os = "linux"))]
@@ -45,14 +66,7 @@ pub async fn attest_with_sink(args: AttestArgs, sink: &crate::toolchain::EventSi
     report_data[..32].copy_from_slice(&provenance_checksum);
 
     if let Some(nonce_string) = nonce {
-        let nonce_data = hex::decode(nonce_string.replace("-", ""))?;
-        if nonce_data.len() > 16 {
-            return Err(anyhow!(
-                "Nonce {} is too long! Must be 16 bytes (32 chars of hex) or less.",
-                nonce_string
-            ));
-        }
-        report_data[32..(32 + nonce_data.len())].copy_from_slice(&nonce_data);
+        report_data[32..].copy_from_slice(&decode_nonce(&nonce_string)?);
     };
 
     tracing::debug!("attesting with report_data {}", hex::encode(report_data));
@@ -132,4 +146,43 @@ async fn embed_snp_vcek(evidence_json: Vec<u8>) -> Result<Vec<u8>> {
     });
     tracing::info!("embedded VCEK ({} bytes) into SnpEvidence", vcek_der.len());
     Ok(serde_json::to_vec(&envelope)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_nonce_accepts_exactly_16_bytes() {
+        let bytes = decode_nonce("00112233445566778899aabbccddeeff").unwrap();
+        assert_eq!(
+            bytes,
+            [
+                0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+                0xee, 0xff
+            ]
+        );
+    }
+
+    #[test]
+    fn decode_nonce_accepts_dashed_uuid() {
+        // `uuidgen` output is a dashed 16-byte value.
+        let bytes = decode_nonce("00112233-4455-6677-8899-aabbccddeeff").unwrap();
+        assert_eq!(bytes.len(), 16);
+    }
+
+    #[test]
+    fn decode_nonce_rejects_non_16_byte_lengths() {
+        for nonce in [
+            "",
+            "00",
+            "00112233445566778899aabbccddee",   // 15 bytes
+            "00112233445566778899aabbccddeeff00", // 17 bytes
+        ] {
+            assert!(
+                decode_nonce(nonce).is_err(),
+                "nonce {nonce:?} must be rejected"
+            );
+        }
+    }
 }

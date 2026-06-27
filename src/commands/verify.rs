@@ -18,7 +18,7 @@ pub struct VerifyArgs {
     #[arg()]
     path: PathBuf,
     /// Optional nonce, as hex string, to be checked against the attestation.
-    /// Can be up to 16 bytes.
+    /// Must be exactly 16 bytes (32 hex chars).
     #[arg(short, long)]
     nonce: Option<String>,
     /// Path to the IGVM file the CVM booted from. When set, verifies that the
@@ -144,25 +144,58 @@ fn build_dir_name(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
+/// Every nonce is exactly this many bytes. A fixed width means the verifier
+/// always knows where the nonce ends, so trailing zero bytes are restored
+/// deterministically (see `verify_nonce`) and can never reduce the nonce's
+/// effective randomness.
+const NONCE_LEN: usize = 16;
+
 fn verify_nonce(verification_result: &VerificationResult, nonce_string: String) -> Verification {
-    let nonce = hex::decode(nonce_string).unwrap();
-    if let Some(signed_data) = &verification_result.claims.signed_data.split_at_checked(32) {
-        let signed_nonce = signed_data.1;
+    let nonce = match hex::decode(&nonce_string) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return Verification::failure(
+                "Invalid nonce hex",
+                &format!("Could not decode nonce {nonce_string:?} as hex: {e}"),
+            );
+        }
+    };
+    if nonce.len() != NONCE_LEN {
+        return Verification::failure(
+            &format!("Nonce must be exactly {NONCE_LEN} bytes"),
+            &format!(
+                "Expected {NONCE_LEN} bytes ({} hex chars); got {} bytes",
+                NONCE_LEN * 2,
+                nonce.len()
+            ),
+        );
+    }
+
+    if let Some((_, signed_nonce)) = verification_result.claims.signed_data.split_at_checked(32) {
+        // The attestation library strips trailing null bytes from `signed_data`,
+        // so the nonce region may be shorter than the fixed-width slot it was
+        // written into. Zero-extend it back to NONCE_LEN and compare in full; a
+        // region longer than the slot can never be a valid nonce.
+        let matches = signed_nonce.len() <= NONCE_LEN && {
+            let mut padded = [0u8; NONCE_LEN];
+            padded[..signed_nonce.len()].copy_from_slice(signed_nonce);
+            padded.as_slice() == nonce.as_slice()
+        };
 
         tracing::debug!(
             "signed_nonce {:?} given nonce {:?} equal {}",
             hex::encode(signed_nonce),
             hex::encode(&nonce),
-            signed_nonce == nonce
+            matches
         );
 
-        match signed_nonce == nonce {
+        match matches {
             true => Verification::success("Nonce matches attestation"),
             false => Verification::failure(
                 "Nonce mismatch",
                 &format!(
                     "Expected attested nonce {:?}\nActual value was        {:?}",
-                    hex::encode(nonce),
+                    hex::encode(&nonce),
                     hex::encode(signed_nonce)
                 ),
             ),
@@ -515,58 +548,110 @@ mod tests {
         }
     }
 
+    // A 16-byte nonce always verifies against a *real* attestation, including
+    // one that ends in zero bytes. `attest` writes the nonce into the 16-byte
+    // report_data slot; the attestation library then strips trailing null bytes
+    // when producing `signed_data`. Verification zero-extends the signed nonce
+    // back to the known 16-byte width and compares in full, so trailing zeros
+    // are always significant and never reduce the nonce's effective randomness.
     #[test]
     fn verify_signed_nonce() {
-        assert_verify_nonce("");
-        assert_verify_nonce("aa");
-        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        assert_verify_nonce("deadbeefdeadbeefdeadbeefdeadbeef");
-        assert_verify_nonce("43C4EF48E21A45B886B2FA7D7CD0EF59");
-        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        assert_verify_nonce("00");
-        assert_verify_nonce("000000000000000000000000000000");
-        assert_verify_nonce("00000000000000000000000000000000");
-        assert_verify_nonce("0000000000000000000000000000000000");
+        assert_verify_real_nonce("deadbeefdeadbeefdeadbeefdeadbeef");
+        assert_verify_real_nonce("43c4ef48e21a45b886b2fa7d7cd0ef59");
+        assert_verify_real_nonce("ffffffffffffffffffffffffffffffff");
+        // ends in a single zero byte (one byte stripped, one zero-extended)
+        assert_verify_real_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00");
+        // ends in several zero bytes (most stripping, most zero-extension)
+        assert_verify_real_nonce("deadbeefdeadbeefdeadbeef00000000");
     }
 
-    fn assert_verify_nonce(nonce: &str) {
-        let mut signed_data = vec![0; 32];
-        let mut nonce_bytes = hex::decode(nonce).unwrap();
-        signed_data.append(&mut nonce_bytes);
+    /// Build `signed_data` like attest does: 32-byte checksum followed by
+    /// 16-byte nonce, with trailing nulls stripped.
+    fn assert_verify_real_nonce(nonce: &str) {
+        let nonce_bytes = hex::decode(nonce).unwrap();
+        assert_eq!(nonce_bytes.len(), 16, "test nonce must be exactly 16 bytes");
+
+        let mut report_data = vec![0u8; 48];
+        report_data[..32].copy_from_slice(&[0xab; 32]);
+        report_data[32..].copy_from_slice(&nonce_bytes);
+
+        // Mirror attestation's strip_trailing_nulls on the full report_data.
+        let end = report_data
+            .iter()
+            .rposition(|&b| b != 0)
+            .map_or(0, |i| i + 1);
+        let signed_data = report_data[..end].to_vec();
 
         let vr = make_verification_result(true, signed_data);
         match verify_nonce(&vr, nonce.to_string()) {
             Verification::Success { message } => {
                 assert!(message.contains("match"), "message: {message}");
             }
-            Verification::Failure { message, .. } => panic!("expected success: {message}"),
+            Verification::Failure { message, .. } => {
+                panic!("expected success for nonce {nonce:?}: {message}")
+            }
+        }
+    }
+
+    // An expected nonce that is not exactly 16 bytes is rejected outright. The
+    // whole point of the fixed size is that every nonce is 16 bytes, so a short
+    // (or over-long) value is never silently accepted with reduced entropy.
+    #[test]
+    fn verify_nonce_rejects_non_16_byte_expected() {
+        let mut signed_data = vec![0xab; 32];
+        signed_data.extend_from_slice(&[0xcd; 16]);
+        for nonce in [
+            "",
+            "cd",
+            "cdcdcdcd",
+            "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",   // 15 bytes
+            "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", // 17 bytes
+        ] {
+            let vr = make_verification_result(true, signed_data.clone());
+            match verify_nonce(&vr, nonce.to_string()) {
+                Verification::Failure { message, .. } => {
+                    assert!(message.contains("16 bytes"), "nonce {nonce:?}: {message}");
+                }
+                Verification::Success { .. } => {
+                    panic!("expected failure for non-16-byte nonce {nonce:?}")
+                }
+            }
+        }
+    }
+
+    // A malformed (non-hex) expected nonce is reported as a failure, not a panic.
+    #[test]
+    fn verify_nonce_rejects_invalid_hex() {
+        let mut signed_data = vec![0xab; 32];
+        signed_data.extend_from_slice(&[0xcd; 16]);
+        for nonce in ["zz", "deadbeefg", "not hex at all"] {
+            let vr = make_verification_result(true, signed_data.clone());
+            match verify_nonce(&vr, nonce.to_string()) {
+                Verification::Failure { message, .. } => {
+                    assert!(message.contains("hex"), "nonce {nonce:?}: {message}");
+                }
+                Verification::Success { .. } => {
+                    panic!("expected failure for non-hex nonce {nonce:?}")
+                }
+            }
         }
     }
 
     #[test]
     fn verify_signed_nonce_errors() {
-        assert_verify_nonce_fails(vec![], "", "missing");
-        assert_verify_nonce_fails(vec![0; 3], "", "missing");
-        assert_verify_nonce_fails(vec![0; 31], "", "missing");
-        assert_verify_nonce_fails(vec![0; 33], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 49], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 50], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 51], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 64], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 65], "", "mismatch");
+        // A valid 16-byte expected nonce, but signed_data has no room for one.
+        let nonce = "deadbeefdeadbeefdeadbeefdeadbeef";
+        assert_verify_nonce_fails(vec![], nonce, "missing");
+        assert_verify_nonce_fails(vec![0; 3], nonce, "missing");
+        assert_verify_nonce_fails(vec![0; 31], nonce, "missing");
 
-        assert_verify_nonce_fails(vec![], "cafe", "missing");
-        assert_verify_nonce_fails(vec![0; 3], "cafe", "missing");
-        assert_verify_nonce_fails(vec![0; 31], "cafe", "missing");
-        assert_verify_nonce_fails(vec![0; 33], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 49], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 50], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 51], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 64], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 65], "cafe", "mismatch");
-
-        assert_verify_nonce_fails(vec![0; 50], "aa000000000000000000000000000000", "mismatch");
+        // Long enough to split, but the attested nonce (zero-extended to 16
+        // bytes) differs from the expected one -> mismatch.
+        assert_verify_nonce_fails(vec![0xab; 33], nonce, "mismatch");
+        assert_verify_nonce_fails(vec![0xab; 48], nonce, "mismatch");
+        // An over-long nonce region (more than 16 bytes) can never match.
+        assert_verify_nonce_fails(vec![0xab; 49], nonce, "mismatch");
+        assert_verify_nonce_fails(vec![0xab; 65], nonce, "mismatch");
     }
 
     fn assert_verify_nonce_fails(signed_data: Vec<u8>, nonce: &str, needle: &str) {

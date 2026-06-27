@@ -192,10 +192,7 @@ impl OvmfMeta<'_> {
         let (g, mut m1, _) = Self::meta_blk(f)?;
 
         if g == OVMF_META_LIST {
-            loop {
-                let Some((g, b, m2)) = Self::meta_blk(m1) else {
-                    break;
-                };
+            while let Some((g, b, m2)) = Self::meta_blk(m1) {
                 ovmfmeta.parse_blk(g, b);
                 m1 = m2;
             }

@@ -1,4 +1,2 @@
 [alias]
 bin = ["run", "--package", "cargo-bin", "--"]
-deny = ["bin", "cargo-deny"]
-nextest = ["bin", "cargo-nextest"]

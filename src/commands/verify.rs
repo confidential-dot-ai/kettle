@@ -756,7 +756,6 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         fs_err::write(tmp.path().join("evidence.json"), b"{}").unwrap();
         fs_err::write(tmp.path().join("provenance.json"), CARGO_FIXTURE).unwrap();
-        // oras-style: binary dropped directly beside provenance.json, no artifacts/
         fs_err::write(tmp.path().join("rg"), b"binary").unwrap();
 
         let build = Build::from_dir(&tmp.path().to_path_buf()).unwrap();
@@ -787,7 +786,6 @@ mod tests {
 
     #[test]
     fn build_from_dir_missing_artifacts_is_ok() {
-        // artifacts/ is optional now: absence is not an error.
         let tmp = TempDir::new().unwrap();
         fs_err::write(tmp.path().join("evidence.json"), b"{}").unwrap();
         fs_err::write(tmp.path().join("provenance.json"), CARGO_FIXTURE).unwrap();
@@ -814,7 +812,6 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let nested = tmp.path().join("my-build");
         fs_err::create_dir(&nested).unwrap();
-        // `.` has no `file_name()` component; this used to panic.
         let prev = std::env::current_dir().unwrap();
         std::env::set_current_dir(&nested).unwrap();
         let name = build_dir_name(Path::new("."));

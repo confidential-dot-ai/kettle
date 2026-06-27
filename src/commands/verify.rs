@@ -553,7 +553,7 @@ mod tests {
         let nonce_bytes = hex::decode(nonce).unwrap();
         assert_eq!(nonce_bytes.len(), 16, "test nonce must be exactly 16 bytes");
 
-        let mut report_data = vec![0u8; 48];
+        let mut report_data = [0u8; 48];
         report_data[..32].copy_from_slice(&[0xab; 32]);
         report_data[32..].copy_from_slice(&nonce_bytes);
 
@@ -667,7 +667,7 @@ mod tests {
     /// library does when producing `signed_data`).
     fn signed_data_for(checksum: &[u8], nonce: Option<&[u8]>) -> Vec<u8> {
         assert_eq!(checksum.len(), 32, "checksum must be 32 bytes");
-        let mut report_data = vec![0u8; 48];
+        let mut report_data = [0u8; 48];
         report_data[..32].copy_from_slice(checksum);
         if let Some(n) = nonce {
             assert_eq!(n.len(), 16, "nonce must be 16 bytes");

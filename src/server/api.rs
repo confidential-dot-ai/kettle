@@ -90,9 +90,10 @@ mod tests {
 
     #[test]
     fn validate_nonce_accepts_exactly_16_bytes() {
-        let bytes = validate_nonce("00112233445566778899aabbccddeeff")
+        let nonce: [u8; 16] = rand::random();
+        let bytes = validate_nonce(&hex::encode(nonce))
             .expect("16-byte nonce must be accepted");
-        assert_eq!(bytes.len(), 16);
+        assert_eq!(bytes, nonce);
     }
 
     #[test]

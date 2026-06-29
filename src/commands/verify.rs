@@ -538,24 +538,37 @@ mod tests {
 
     #[test]
     fn verify_signed_nonce() {
-        assert_verify_real_nonce("deadbeefdeadbeefdeadbeefdeadbeef");
-        assert_verify_real_nonce("43c4ef48e21a45b886b2fa7d7cd0ef59");
-        assert_verify_real_nonce("ffffffffffffffffffffffffffffffff");
-        // ensure zero bytes still verify correctly
-        assert_verify_real_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00");
-        // ends in several zero bytes (most stripping, most zero-extension)
-        assert_verify_real_nonce("deadbeefdeadbeefdeadbeef00000000");
+        // A nonce with no trailing zero bytes (nothing gets stripped).
+        let mut no_trailing_zeros = random_nonce();
+        no_trailing_zeros[15] |= 1;
+        assert_verify_real_nonce(no_trailing_zeros);
+
+        // A couple of fully arbitrary nonces.
+        assert_verify_real_nonce(random_nonce());
+        assert_verify_real_nonce(random_nonce());
+
+        // Ends in a single zero byte (some stripping, some zero-extension).
+        let mut one_trailing_zero = random_nonce();
+        one_trailing_zero[15] = 0;
+        assert_verify_real_nonce(one_trailing_zero);
+
+        // Ends in several zero bytes (most stripping, most zero-extension).
+        let mut many_trailing_zeros = random_nonce();
+        many_trailing_zeros[12..].fill(0);
+        assert_verify_real_nonce(many_trailing_zeros);
+    }
+
+    /// A random 16-byte nonce, the size attest produces.
+    fn random_nonce() -> [u8; 16] {
+        rand::random()
     }
 
     /// Build `signed_data` like attest does: 32-byte checksum followed by
     /// 16-byte nonce, with trailing nulls stripped.
-    fn assert_verify_real_nonce(nonce: &str) {
-        let nonce_bytes = hex::decode(nonce).unwrap();
-        assert_eq!(nonce_bytes.len(), 16, "test nonce must be exactly 16 bytes");
-
+    fn assert_verify_real_nonce(nonce: [u8; 16]) {
         let mut report_data = [0u8; 48];
         report_data[..32].copy_from_slice(&[0xab; 32]);
-        report_data[32..].copy_from_slice(&nonce_bytes);
+        report_data[32..].copy_from_slice(&nonce);
 
         // Mirror attestation's strip_trailing_nulls on the full report_data.
         let end = report_data
@@ -565,7 +578,7 @@ mod tests {
         let signed_data = report_data[..end].to_vec();
 
         let vr = make_verification_result(true, signed_data);
-        match verify_nonce(&vr, nonce.to_string()) {
+        match verify_nonce(&vr, hex::encode(nonce)) {
             Verification::Success { message } => {
                 assert!(message.contains("match"), "message: {message}");
             }
@@ -619,7 +632,8 @@ mod tests {
     #[test]
     fn verify_signed_nonce_errors() {
         // A valid 16-byte expected nonce, but signed_data has no room for one.
-        let nonce = "deadbeefdeadbeefdeadbeefdeadbeef";
+        let nonce = hex::encode(random_nonce());
+        let nonce = nonce.as_str();
         assert_verify_nonce_fails(vec![], nonce, "missing");
         assert_verify_nonce_fails(vec![0; 3], nonce, "missing");
         assert_verify_nonce_fails(vec![0; 31], nonce, "missing");
@@ -718,7 +732,7 @@ mod tests {
     fn verify_checksum_and_nonce_both_ending_in_zeros() {
         let mut checksum = vec![0xab; 32];
         checksum[31] = 0x00;
-        let mut nonce = vec![0x11; 16];
+        let mut nonce = random_nonce().to_vec();
         nonce[14] = 0x00;
         nonce[15] = 0x00;
         let signed_data = signed_data_for(&checksum, Some(&nonce));

@@ -164,21 +164,26 @@ mod tests {
 
     #[test]
     fn decode_nonce_accepts_exactly_16_bytes() {
-        let bytes = decode_nonce("00112233445566778899aabbccddeeff").unwrap();
-        assert_eq!(
-            bytes,
-            [
-                0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
-                0xee, 0xff
-            ]
-        );
+        let nonce: [u8; 16] = rand::random();
+        let bytes = decode_nonce(&hex::encode(nonce)).unwrap();
+        assert_eq!(bytes, nonce);
     }
 
     #[test]
     fn decode_nonce_accepts_dashed_uuid() {
         // `uuidgen` output is a dashed 16-byte value.
-        let bytes = decode_nonce("00112233-4455-6677-8899-aabbccddeeff").unwrap();
-        assert_eq!(bytes.len(), 16);
+        let nonce: [u8; 16] = rand::random();
+        let hex = hex::encode(nonce);
+        let dashed = format!(
+            "{}-{}-{}-{}-{}",
+            &hex[0..8],
+            &hex[8..12],
+            &hex[12..16],
+            &hex[16..20],
+            &hex[20..32],
+        );
+        let bytes = decode_nonce(&dashed).unwrap();
+        assert_eq!(bytes, nonce);
     }
 
     #[test]

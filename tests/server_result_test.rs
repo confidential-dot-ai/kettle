@@ -14,7 +14,7 @@ async fn result_endpoint_streams_tarball_when_done() {
     let runner = TestRunner::new();
     let app = router_with_runner_for_tests(runner.clone() as Arc<dyn JobRunner>);
     let body = serde_json::to_vec(&BuildRequest {
-        nonce: "000102030405060708090a0b0c0d0e0f".into(),
+        nonce: hex::encode(rand::random::<[u8; 16]>()),
         repo_url: Some("https://x".into()),
         repo_ref: None,
         source_data: None,

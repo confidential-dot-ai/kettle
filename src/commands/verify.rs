@@ -522,13 +522,14 @@ mod tests {
     #[test]
     fn verify_provenance_mismatch_shows_attested_checksum() {
         let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        let signed_data = vec![0xab; 32];
-        let vr = make_verification_result(true, signed_data);
+        // A random checksum that won't match the fixture's real one.
+        let signed_data: [u8; 32] = rand::random();
+        let vr = make_verification_result(true, signed_data.to_vec());
         match verify_provenance(&vr, &provenance) {
             Verification::Failure { message, details } => {
                 assert!(message.contains("mismatch"), "message: {message}");
                 assert!(
-                    details.contains(&"ab".repeat(32)),
+                    details.contains(&hex::encode(signed_data)),
                     "details should show the attested checksum hex: {details}"
                 );
             }
@@ -567,7 +568,8 @@ mod tests {
     /// 16-byte nonce, with trailing nulls stripped.
     fn assert_verify_real_nonce(nonce: [u8; 16]) {
         let mut report_data = [0u8; 48];
-        report_data[..32].copy_from_slice(&[0xab; 32]);
+        // Random checksum; only the nonce half matters to this test.
+        report_data[..32].copy_from_slice(&rand::random::<[u8; 32]>());
         report_data[32..].copy_from_slice(&nonce);
 
         // Mirror attestation's strip_trailing_nulls on the full report_data.

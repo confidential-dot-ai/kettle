@@ -1,5 +1,6 @@
 /crates/*/target
 /crates/*/Cargo.lock
 /kettle-build
+/regenerated.json
 /target
 .bin/

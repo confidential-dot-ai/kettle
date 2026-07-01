@@ -202,7 +202,7 @@ The digest is the package's `integrity` value (SRI, typically SHA-512) from the 
 
 ```json
 "builder": {
-  "id": "https://lunal.dev/kettle-tee/v1"
+  "id": "https://confidential.ai/attested-builds"
 }
 ```
 
@@ -302,7 +302,7 @@ A cargo build of ripgrep (dependency list truncated):
     },
     "runDetails": {
       "builder": {
-        "id": "https://lunal.dev/kettle-tee/v1"
+        "id": "https://confidential.ai/attested-builds"
       },
       "byproducts": [
         {

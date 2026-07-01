@@ -362,14 +362,14 @@ mod tests {
         assert_eq!(p.predicate_type, "https://slsa.dev/provenance/v1");
         assert_eq!(
             p.predicate.build_definition.build_type,
-            "https://lunal.dev/kettle/cargo@v1"
+            "https://confidential.ai/attested-builds/v1"
         );
         assert_eq!(
             p.predicate
                 .build_definition
                 .external_parameters
                 .build_command,
-            "cargo build"
+            "cargo build --locked --release"
         );
         assert_eq!(p.subject.len(), 1);
         assert_eq!(p.subject[0].name, "rg");
@@ -394,7 +394,7 @@ mod tests {
         assert_eq!(p.predicate_type, "https://slsa.dev/provenance/v1");
         assert_eq!(
             p.predicate.build_definition.build_type,
-            "https://lunal.dev/kettle/nix@v1"
+            "https://confidential.ai/attested-builds/v1"
         );
         match &p.predicate.build_definition.internal_parameters.toolchain {
             Toolchain::NixToolchain { nix, kettle: _ } => {
@@ -789,13 +789,13 @@ mod tests {
     #[test]
     fn accessor_build_id() {
         let p = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        assert_eq!(p.build_id(), "build-20260520-215052-17223ff8");
+        assert_eq!(p.build_id(), "build-20260702-014307-02655638");
     }
 
     #[test]
     fn accessor_timestamp() {
         let p = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        assert_eq!(p.timestamp(), "2026-05-20T21:50:52.083557+00:00");
+        assert_eq!(p.timestamp(), "2026-07-02T01:43:07.839649+00:00");
     }
 
     #[test]

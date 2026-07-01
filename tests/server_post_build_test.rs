@@ -12,7 +12,7 @@ fn make_router() -> axum::Router {
 #[tokio::test]
 async fn post_build_returns_job_id() {
     let req = BuildRequest {
-        nonce: "deadbeef".into(),
+        nonce: "000102030405060708090a0b0c0d0e0f".into(),
         repo_url: Some("https://github.com/x/y".into()),
         repo_ref: None,
         source_data: None,
@@ -38,7 +38,7 @@ async fn post_build_returns_job_id() {
 #[tokio::test]
 async fn post_build_second_call_returns_409() {
     let req = BuildRequest {
-        nonce: "00".into(),
+        nonce: "000102030405060708090a0b0c0d0e0f".into(),
         repo_url: Some("https://github.com/x/y".into()),
         repo_ref: None,
         source_data: None,
@@ -104,7 +104,9 @@ async fn post_build_rejects_oversize_nonce() {
 
 #[tokio::test]
 async fn post_build_rejects_missing_source() {
-    let bad = r#"{"nonce":"deadbeef"}"#;
+    // Valid 16-byte nonce so the request is rejected for the missing source,
+    // not for the nonce — that is the path this test is meant to cover.
+    let bad = r#"{"nonce":"000102030405060708090a0b0c0d0e0f"}"#;
     let app = make_router();
     let resp = app
         .oneshot(

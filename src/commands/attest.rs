@@ -7,14 +7,28 @@ pub struct AttestArgs {
     /// Path to the project to be built and attested
     #[arg()]
     pub path: PathBuf,
-    /// Optional nonce, as hex string, to be included in the attestation.
-    /// Can be up to 16 bytes. For a unique nonce, use e.g. `uuidgen`.
+    /// Optional nonce, as hex string, to be included in the attestation. Must
+    /// be exactly 16 bytes (32 hex chars). Generate with e.g. `uuidgen`.
     #[arg(short, long)]
     pub nonce: Option<String>,
 }
 
 pub async fn attest(args: AttestArgs) -> Result<()> {
     attest_with_sink(args, &crate::toolchain::EventSink::noop()).await
+}
+
+// Decode 16-byte nonce from hex string, stripping dashes so UUIDs are allowed.
+// allow(dead_code) to prevent warnings outside of attest-mode builds and tests.
+#[cfg_attr(not(all(feature = "attest", target_os = "linux")), allow(dead_code))]
+fn decode_nonce(nonce_string: &str) -> Result<[u8; 16]> {
+    let bytes = hex::decode(nonce_string.replace('-', ""))?;
+    bytes.as_slice().try_into().map_err(|_| {
+        anyhow!(
+            "Nonce {} must be exactly 16 bytes (32 hex chars); got {} bytes",
+            nonce_string,
+            bytes.len()
+        )
+    })
 }
 
 #[cfg(all(feature = "attest", target_os = "linux"))]
@@ -29,30 +43,29 @@ pub async fn attest_with_sink(args: AttestArgs, sink: &crate::toolchain::EventSi
     println!("Running on platform: {}", platform);
     sink.emit(crate::api::Event::Attest {
         msg: format!("Running on platform: {platform}"),
-    }).await;
+    })
+    .await;
 
     let provenance_bytes = fs_err::read(path.join("kettle-build/provenance.json"))?;
     let provenance = Provenance::from_json(&provenance_bytes)?;
     let provenance_checksum = provenance.checksum();
-    println!("Attesting build provenance.json with checksum {}",
-             hex::encode(&provenance_checksum));
+    println!(
+        "Attesting build provenance.json with checksum {}",
+        hex::encode(&provenance_checksum)
+    );
     sink.emit(crate::api::Event::Attest {
-        msg: format!("Attesting provenance.json (checksum {})",
-                     hex::encode(&provenance_checksum)),
-    }).await;
+        msg: format!(
+            "Attesting provenance.json (checksum {})",
+            hex::encode(&provenance_checksum)
+        ),
+    })
+    .await;
 
     let mut report_data = [0u8; 48];
     report_data[..32].copy_from_slice(&provenance_checksum);
 
     if let Some(nonce_string) = nonce {
-        let nonce_data = hex::decode(nonce_string.replace("-", ""))?;
-        if nonce_data.len() > 16 {
-            return Err(anyhow!(
-                "Nonce {} is too long! Must be 16 bytes (32 chars of hex) or less.",
-                nonce_string
-            ));
-        }
-        report_data[32..(32 + nonce_data.len())].copy_from_slice(&nonce_data);
+        report_data[32..].copy_from_slice(&decode_nonce(&nonce_string)?);
     };
 
     tracing::debug!("attesting with report_data {}", hex::encode(report_data));
@@ -65,13 +78,17 @@ pub async fn attest_with_sink(args: AttestArgs, sink: &crate::toolchain::EventSi
     println!("Attestation complete! Evidence written to file `evidence.json`");
     sink.emit(crate::api::Event::Attest {
         msg: "Attestation complete! evidence.json written".into(),
-    }).await;
+    })
+    .await;
 
     Ok(())
 }
 
 #[cfg(not(all(feature = "attest", target_os = "linux")))]
-pub async fn attest_with_sink(_args: AttestArgs, _sink: &crate::toolchain::EventSink) -> Result<()> {
+pub async fn attest_with_sink(
+    _args: AttestArgs,
+    _sink: &crate::toolchain::EventSink,
+) -> Result<()> {
     Err(anyhow!(
         "Attestation is disabled. Rebuild Kettle with `--features attest` to enable this command."
     ))
@@ -82,7 +99,7 @@ pub async fn attest_with_sink(_args: AttestArgs, _sink: &crate::toolchain::Event
 // we fetch the VCEK here and embed it before writing the evidence.
 #[cfg(all(feature = "attest", target_os = "linux"))]
 async fn embed_snp_vcek(evidence_json: Vec<u8>) -> Result<Vec<u8>> {
-    use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+    use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use sev::firmware::guest::AttestationReport;
     use sev::parser::ByteParser;
 
@@ -90,7 +107,9 @@ async fn embed_snp_vcek(evidence_json: Vec<u8>) -> Result<Vec<u8>> {
     if envelope.get("platform").and_then(|p| p.as_str()) != Some("snp") {
         return Ok(evidence_json);
     }
-    let evidence = envelope.get_mut("evidence").ok_or_else(|| anyhow!("evidence missing"))?;
+    let evidence = envelope
+        .get_mut("evidence")
+        .ok_or_else(|| anyhow!("evidence missing"))?;
     if !evidence.get("cert_chain").is_some_and(|c| c.is_null()) {
         return Ok(evidence_json);
     }
@@ -98,14 +117,18 @@ async fn embed_snp_vcek(evidence_json: Vec<u8>) -> Result<Vec<u8>> {
         .get("attestation_report")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow!("attestation_report missing"))?;
-    let report_bytes = BASE64.decode(report_b64).map_err(|e| anyhow!("report base64: {e}"))?;
+    let report_bytes = BASE64
+        .decode(report_b64)
+        .map_err(|e| anyhow!("report base64: {e}"))?;
     let report = AttestationReport::from_bytes(&report_bytes)
         .map_err(|e| anyhow!("SNP report parse: {e}"))?;
 
     let cpuid_fam = report.cpuid_fam_id.unwrap_or(0);
     let cpuid_mod = report.cpuid_mod_id.unwrap_or(0);
     let processor_gen = attestation::ProcessorGeneration::from_cpuid(cpuid_fam, cpuid_mod)
-        .ok_or_else(|| anyhow!("unknown SNP processor family={cpuid_fam:#x} model={cpuid_mod:#x}"))?;
+        .ok_or_else(|| {
+            anyhow!("unknown SNP processor family={cpuid_fam:#x} model={cpuid_mod:#x}")
+        })?;
 
     let mut chip_id = [0u8; 64];
     chip_id.copy_from_slice(&report.chip_id[..]);
@@ -122,9 +145,10 @@ async fn embed_snp_vcek(evidence_json: Vec<u8>) -> Result<Vec<u8>> {
     };
 
     let provider = attestation::DefaultCertProvider::new();
-    let vcek_der = attestation::CertProvider::get_snp_vcek(&provider, processor_gen, &chip_id, &tcb)
-        .await
-        .map_err(|e| anyhow!("VCEK fetch from AMD KDS failed: {e}"))?;
+    let vcek_der =
+        attestation::CertProvider::get_snp_vcek(&provider, processor_gen, &chip_id, &tcb)
+            .await
+            .map_err(|e| anyhow!("VCEK fetch from AMD KDS failed: {e}"))?;
     evidence["cert_chain"] = serde_json::json!({
         "vcek": BASE64.encode(&vcek_der),
         "ask": null,
@@ -132,4 +156,48 @@ async fn embed_snp_vcek(evidence_json: Vec<u8>) -> Result<Vec<u8>> {
     });
     tracing::info!("embedded VCEK ({} bytes) into SnpEvidence", vcek_der.len());
     Ok(serde_json::to_vec(&envelope)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_nonce_accepts_exactly_16_bytes() {
+        let nonce: [u8; 16] = rand::random();
+        let bytes = decode_nonce(&hex::encode(nonce)).unwrap();
+        assert_eq!(bytes, nonce);
+    }
+
+    #[test]
+    fn decode_nonce_accepts_dashed_uuid() {
+        // `uuidgen` output is a dashed 16-byte value.
+        let nonce: [u8; 16] = rand::random();
+        let hex = hex::encode(nonce);
+        let dashed = format!(
+            "{}-{}-{}-{}-{}",
+            &hex[0..8],
+            &hex[8..12],
+            &hex[12..16],
+            &hex[16..20],
+            &hex[20..32],
+        );
+        let bytes = decode_nonce(&dashed).unwrap();
+        assert_eq!(bytes, nonce);
+    }
+
+    #[test]
+    fn decode_nonce_rejects_non_16_byte_lengths() {
+        for nonce in [
+            "",
+            "00",
+            "00112233445566778899aabbccddee",     // 15 bytes
+            "00112233445566778899aabbccddeeff00", // 17 bytes
+        ] {
+            assert!(
+                decode_nonce(nonce).is_err(),
+                "nonce {nonce:?} must be rejected"
+            );
+        }
+    }
 }

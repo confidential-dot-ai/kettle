@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2021"
 description = "Build and measure IGVM files for confidential VMs"
 license = "Apache-2.0"
+publish = false
 
 [lib]
 name = "igvm_tools"

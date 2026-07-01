@@ -18,7 +18,7 @@ pub struct VerifyArgs {
     #[arg()]
     path: PathBuf,
     /// Optional nonce, as hex string, to be checked against the attestation.
-    /// Can be up to 16 bytes.
+    /// Must be exactly 16 bytes (32 hex chars).
     #[arg(short, long)]
     nonce: Option<String>,
     /// Path to the IGVM file the CVM booted from. When set, verifies that the
@@ -144,25 +144,52 @@ fn build_dir_name(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
+// Fixed-size nonces to prevent padding issues.
+const NONCE_LEN: usize = 16;
+
 fn verify_nonce(verification_result: &VerificationResult, nonce_string: String) -> Verification {
-    let nonce = hex::decode(nonce_string).unwrap();
-    if let Some(signed_data) = &verification_result.claims.signed_data.split_at_checked(32) {
-        let signed_nonce = signed_data.1;
+    let nonce = match hex::decode(&nonce_string) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return Verification::failure(
+                "Invalid nonce hex",
+                &format!("Could not decode nonce {nonce_string:?} as hex: {e}"),
+            );
+        }
+    };
+    if nonce.len() != NONCE_LEN {
+        return Verification::failure(
+            &format!("Nonce must be exactly {NONCE_LEN} bytes"),
+            &format!(
+                "Expected {NONCE_LEN} bytes ({} hex chars); got {} bytes",
+                NONCE_LEN * 2,
+                nonce.len()
+            ),
+        );
+    }
+
+    if let Some((_, signed_nonce)) = verification_result.claims.signed_data.split_at_checked(32) {
+        // The attestation library may have removed trailing null bytes, add them if necessary.
+        let matches = signed_nonce.len() <= NONCE_LEN && {
+            let mut padded = [0u8; NONCE_LEN];
+            padded[..signed_nonce.len()].copy_from_slice(signed_nonce);
+            padded.as_slice() == nonce.as_slice()
+        };
 
         tracing::debug!(
             "signed_nonce {:?} given nonce {:?} equal {}",
             hex::encode(signed_nonce),
             hex::encode(&nonce),
-            signed_nonce == nonce
+            matches
         );
 
-        match signed_nonce == nonce {
+        match matches {
             true => Verification::success("Nonce matches attestation"),
             false => Verification::failure(
                 "Nonce mismatch",
                 &format!(
                     "Expected attested nonce {:?}\nActual value was        {:?}",
-                    hex::encode(nonce),
+                    hex::encode(&nonce),
                     hex::encode(signed_nonce)
                 ),
             ),
@@ -249,8 +276,7 @@ fn compare_roothash(igvm_roothash: &str, disk_roothash: &str) -> Verification {
 }
 
 /// Verify that the dm-verity roothash committed inside the IGVM matches the
-/// roothash stored in the disk image. Reported as a verification failure (never
-/// a panic) on any structural problem.
+/// roothash stored in the disk image.
 fn verify_image_roothash(igvm_path: &Path, image_path: &Path) -> Verification {
     let bytes = match fs_err::read(igvm_path) {
         Ok(b) => b,
@@ -271,7 +297,7 @@ fn verify_image_roothash(igvm_path: &Path, image_path: &Path) -> Verification {
     let disk_roothash = match crate::verity::stored_roothash(image_path) {
         Ok(r) => r,
         Err(e) => {
-            return Verification::failure("Could not read disk image roothash", &e.to_string())
+            return Verification::failure("Could not read disk image roothash", &e.to_string());
         }
     };
     compare_roothash(&igvm_roothash, &disk_roothash)
@@ -281,48 +307,46 @@ fn verify_provenance(
     verification_result: &VerificationResult,
     provenance: &Provenance,
 ) -> Verification {
-    if let Some(signed_data) = &verification_result.claims.signed_data.split_at_checked(32) {
-        let signed_checksum = signed_data.0;
-        if signed_checksum.len() != 32 {
-            return Verification::Failure {
-                message: "Attested checksum invalid".to_string(),
-                details: format!(
-                    "Expected attestation checksum {:?} to be 32 bytes",
-                    hex::encode(signed_checksum)
-                ),
-            };
-        }
+    compare_checksum(
+        &verification_result.claims.signed_data,
+        &provenance.checksum(),
+    )
+}
 
-        let checksum = provenance.checksum();
-        if checksum.len() != 32 {
-            return Verification::Failure {
-                message: "Provenance checksum invalid".to_string(),
-                details: format!(
-                    "Expected provenance.json checksum {:?} to be 32 bytes",
-                    hex::encode(checksum)
-                ),
-            };
-        }
-
-        match signed_checksum == checksum {
-            true => Verification::success("Provenance checksum match"),
-            false => Verification::failure(
-                "Provenance checksum mismatch",
-                &format!(
-                    "Expected provenance.json checksum {:?}\nActual provenance.json checksum   {:?}",
-                    hex::encode(signed_checksum),
-                    hex::encode(checksum)
-                ),
-            ),
-        }
-    } else {
-        Verification::Failure {
-            message: "Signed data invalid".to_owned(),
+/// Compare the attested provenance checksum (the first 32 bytes of report_data)
+/// against the expected provenance.json checksum.
+///
+/// The checksum occupies the first 32 bytes of the fixed 48-byte report_data,
+/// but the attestation library strips trailing null bytes from `signed_data`. A
+/// checksum ending in zeros — with no nonce, or an all-zero nonce slot — comes
+/// back shorter than 32 bytes. Zero-extend the signed checksum back to the fixed
+/// 32-byte width (the same trick `verify_nonce` uses) so trailing zeros are
+/// restored deterministically and such a checksum still verifies.
+fn compare_checksum(signed_data: &[u8], expected: &[u8]) -> Verification {
+    if expected.len() != 32 {
+        return Verification::Failure {
+            message: "Provenance checksum invalid".to_string(),
             details: format!(
-                "Expected signed data {:?} to be at least 32 bytes",
-                &verification_result.claims.signed_data
+                "Expected provenance.json checksum {:?} to be 32 bytes",
+                hex::encode(expected)
             ),
-        }
+        };
+    }
+
+    let mut signed_checksum = [0u8; 32];
+    let n = signed_data.len().min(32);
+    signed_checksum[..n].copy_from_slice(&signed_data[..n]);
+
+    match signed_checksum.as_slice() == expected {
+        true => Verification::success("Provenance checksum match"),
+        false => Verification::failure(
+            "Provenance checksum mismatch",
+            &format!(
+                "Expected provenance.json checksum {:?}\nActual attested checksum          {:?}",
+                hex::encode(expected),
+                hex::encode(signed_checksum)
+            ),
+        ),
     }
 }
 
@@ -339,16 +363,13 @@ impl Build {
         let evidence_bytes = fs_err::read(project_dir.join("evidence.json"))?;
         let provenance_bytes = fs_err::read(project_dir.join("provenance.json"))?;
 
-        // Regular files sitting directly in the build dir — e.g. a binary
-        // published by `oras` alongside provenance.json. Subdirectories such as
-        // `artifacts/` are not regular files and are excluded here.
+        // binaries are allowed to be at the top level
         let top_level = fs_err::read_dir(&project_dir)?
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
             .collect();
 
-        // `artifacts/` is optional: classic builds use it, oras-published
-        // builds may not have it at all. Its absence is not an error.
+        // binaries are also allowed to be inside `artifacts/`
         let artifacts_dir = project_dir.join("artifacts");
         let artifacts = if artifacts_dir.is_dir() {
             fs_err::read_dir(artifacts_dir)?
@@ -501,13 +522,14 @@ mod tests {
     #[test]
     fn verify_provenance_mismatch_shows_attested_checksum() {
         let provenance = Provenance::from_json(CARGO_FIXTURE).unwrap();
-        let signed_data = vec![0xab; 32];
-        let vr = make_verification_result(true, signed_data);
+        // A random checksum that won't match the fixture's real one.
+        let signed_data: [u8; 32] = rand::random();
+        let vr = make_verification_result(true, signed_data.to_vec());
         match verify_provenance(&vr, &provenance) {
             Verification::Failure { message, details } => {
                 assert!(message.contains("mismatch"), "message: {message}");
                 assert!(
-                    details.contains(&"ab".repeat(32)),
+                    details.contains(&hex::encode(signed_data)),
                     "details should show the attested checksum hex: {details}"
                 );
             }
@@ -517,56 +539,114 @@ mod tests {
 
     #[test]
     fn verify_signed_nonce() {
-        assert_verify_nonce("");
-        assert_verify_nonce("aa");
-        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        assert_verify_nonce("deadbeefdeadbeefdeadbeefdeadbeef");
-        assert_verify_nonce("43C4EF48E21A45B886B2FA7D7CD0EF59");
-        assert_verify_nonce("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        assert_verify_nonce("00");
-        assert_verify_nonce("000000000000000000000000000000");
-        assert_verify_nonce("00000000000000000000000000000000");
-        assert_verify_nonce("0000000000000000000000000000000000");
+        // A nonce with no trailing zero bytes (nothing gets stripped).
+        let mut no_trailing_zeros = random_nonce();
+        no_trailing_zeros[15] |= 1;
+        assert_verify_real_nonce(no_trailing_zeros);
+
+        // A couple of fully arbitrary nonces.
+        assert_verify_real_nonce(random_nonce());
+        assert_verify_real_nonce(random_nonce());
+
+        // Ends in a single zero byte (some stripping, some zero-extension).
+        let mut one_trailing_zero = random_nonce();
+        one_trailing_zero[15] = 0;
+        assert_verify_real_nonce(one_trailing_zero);
+
+        // Ends in several zero bytes (most stripping, most zero-extension).
+        let mut many_trailing_zeros = random_nonce();
+        many_trailing_zeros[12..].fill(0);
+        assert_verify_real_nonce(many_trailing_zeros);
     }
 
-    fn assert_verify_nonce(nonce: &str) {
-        let mut signed_data = vec![0; 32];
-        let mut nonce_bytes = hex::decode(nonce).unwrap();
-        signed_data.append(&mut nonce_bytes);
+    /// A random 16-byte nonce, the size attest produces.
+    fn random_nonce() -> [u8; 16] {
+        rand::random()
+    }
+
+    /// Build `signed_data` like attest does: 32-byte checksum followed by
+    /// 16-byte nonce, with trailing nulls stripped.
+    fn assert_verify_real_nonce(nonce: [u8; 16]) {
+        let mut report_data = [0u8; 48];
+        // Random checksum; only the nonce half matters to this test.
+        report_data[..32].copy_from_slice(&rand::random::<[u8; 32]>());
+        report_data[32..].copy_from_slice(&nonce);
+
+        // Mirror attestation's strip_trailing_nulls on the full report_data.
+        let end = report_data
+            .iter()
+            .rposition(|&b| b != 0)
+            .map_or(0, |i| i + 1);
+        let signed_data = report_data[..end].to_vec();
 
         let vr = make_verification_result(true, signed_data);
-        match verify_nonce(&vr, nonce.to_string()) {
+        match verify_nonce(&vr, hex::encode(nonce)) {
             Verification::Success { message } => {
                 assert!(message.contains("match"), "message: {message}");
             }
-            Verification::Failure { message, .. } => panic!("expected success: {message}"),
+            Verification::Failure { message, .. } => {
+                panic!("expected success for nonce {nonce:?}: {message}")
+            }
+        }
+    }
+
+    #[test]
+    fn verify_nonce_rejects_non_16_byte_expected() {
+        let mut signed_data = vec![0xab; 32];
+        signed_data.extend_from_slice(&[0xcd; 16]);
+        for nonce in [
+            "",
+            "cd",
+            "cdcdcdcd",
+            "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",     // 15 bytes
+            "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", // 17 bytes
+        ] {
+            let vr = make_verification_result(true, signed_data.clone());
+            match verify_nonce(&vr, nonce.to_string()) {
+                Verification::Failure { message, .. } => {
+                    assert!(message.contains("16 bytes"), "nonce {nonce:?}: {message}");
+                }
+                Verification::Success { .. } => {
+                    panic!("expected failure for non-16-byte nonce {nonce:?}")
+                }
+            }
+        }
+    }
+
+    // A malformed (non-hex) expected nonce is reported as a failure, not a panic.
+    #[test]
+    fn verify_nonce_rejects_invalid_hex() {
+        let mut signed_data = vec![0xab; 32];
+        signed_data.extend_from_slice(&[0xcd; 16]);
+        for nonce in ["zz", "deadbeefg", "not hex at all"] {
+            let vr = make_verification_result(true, signed_data.clone());
+            match verify_nonce(&vr, nonce.to_string()) {
+                Verification::Failure { message, .. } => {
+                    assert!(message.contains("hex"), "nonce {nonce:?}: {message}");
+                }
+                Verification::Success { .. } => {
+                    panic!("expected failure for non-hex nonce {nonce:?}")
+                }
+            }
         }
     }
 
     #[test]
     fn verify_signed_nonce_errors() {
-        assert_verify_nonce_fails(vec![], "", "missing");
-        assert_verify_nonce_fails(vec![0; 3], "", "missing");
-        assert_verify_nonce_fails(vec![0; 31], "", "missing");
-        assert_verify_nonce_fails(vec![0; 33], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 49], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 50], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 51], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 64], "", "mismatch");
-        assert_verify_nonce_fails(vec![0; 65], "", "mismatch");
+        // A valid 16-byte expected nonce, but signed_data has no room for one.
+        let nonce = hex::encode(random_nonce());
+        let nonce = nonce.as_str();
+        assert_verify_nonce_fails(vec![], nonce, "missing");
+        assert_verify_nonce_fails(vec![0; 3], nonce, "missing");
+        assert_verify_nonce_fails(vec![0; 31], nonce, "missing");
 
-        assert_verify_nonce_fails(vec![], "cafe", "missing");
-        assert_verify_nonce_fails(vec![0; 3], "cafe", "missing");
-        assert_verify_nonce_fails(vec![0; 31], "cafe", "missing");
-        assert_verify_nonce_fails(vec![0; 33], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 49], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 50], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 51], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 64], "cafe", "mismatch");
-        assert_verify_nonce_fails(vec![0; 65], "cafe", "mismatch");
-
-        assert_verify_nonce_fails(vec![0; 50], "aa000000000000000000000000000000", "mismatch");
+        // Long enough to split, but the attested nonce (zero-extended to 16
+        // bytes) differs from the expected one -> mismatch.
+        assert_verify_nonce_fails(vec![0xab; 33], nonce, "mismatch");
+        assert_verify_nonce_fails(vec![0xab; 48], nonce, "mismatch");
+        // An over-long nonce region (more than 16 bytes) can never match.
+        assert_verify_nonce_fails(vec![0xab; 49], nonce, "mismatch");
+        assert_verify_nonce_fails(vec![0xab; 65], nonce, "mismatch");
     }
 
     fn assert_verify_nonce_fails(signed_data: Vec<u8>, nonce: &str, needle: &str) {
@@ -581,16 +661,9 @@ mod tests {
 
     #[test]
     fn verify_signed_checksum_errors() {
-        assert_verify_provenance_fails(vec![], "invalid");
-        assert_verify_provenance_fails(vec![0; 3], "invalid");
-        assert_verify_provenance_fails(vec![0; 31], "invalid");
-        assert_verify_provenance_fails(vec![0; 32], "mismatch");
-        assert_verify_provenance_fails(vec![0; 33], "mismatch");
-        assert_verify_provenance_fails(vec![0; 49], "mismatch");
-        assert_verify_provenance_fails(vec![0; 50], "mismatch");
-        assert_verify_provenance_fails(vec![0; 51], "mismatch");
-        assert_verify_provenance_fails(vec![0; 64], "mismatch");
-        assert_verify_provenance_fails(vec![0; 65], "mismatch");
+        for len in [0, 3, 31, 32, 33, 49, 50, 51, 64, 65] {
+            assert_verify_provenance_fails(vec![0; len], "mismatch");
+        }
     }
 
     fn assert_verify_provenance_fails(signed_data: Vec<u8>, needle: &str) {
@@ -601,6 +674,77 @@ mod tests {
                 assert!(message.contains(needle), "message: {message}");
             }
             Verification::Success { .. } => panic!("expected failure"),
+        }
+    }
+
+    /// Build `signed_data` exactly as the real attest pipeline does for a given
+    /// 32-byte checksum and optional 16-byte nonce: lay them into the 48-byte
+    /// report_data slot, then strip all trailing null bytes (as the attestation
+    /// library does when producing `signed_data`).
+    fn signed_data_for(checksum: &[u8], nonce: Option<&[u8]>) -> Vec<u8> {
+        assert_eq!(checksum.len(), 32, "checksum must be 32 bytes");
+        let mut report_data = [0u8; 48];
+        report_data[..32].copy_from_slice(checksum);
+        if let Some(n) = nonce {
+            assert_eq!(n.len(), 16, "nonce must be 16 bytes");
+            report_data[32..].copy_from_slice(n);
+        }
+        let end = report_data
+            .iter()
+            .rposition(|&b| b != 0)
+            .map_or(0, |i| i + 1);
+        report_data[..end].to_vec()
+    }
+
+    fn assert_checksum_matches(signed_data: &[u8], expected: &[u8]) {
+        match compare_checksum(signed_data, expected) {
+            Verification::Success { message } => assert!(message.contains("match"), "{message}"),
+            Verification::Failure { message, details } => {
+                panic!("expected checksum success: {message}\n{details}")
+            }
+        }
+    }
+
+    #[test]
+    fn verify_checksum_ending_in_zeros_without_nonce() {
+        let mut checksum = vec![0xab; 32];
+        checksum[30] = 0x00;
+        checksum[31] = 0x00;
+        let signed_data = signed_data_for(&checksum, None);
+        assert!(
+            signed_data.len() < 32,
+            "precondition: the checksum tail should be stripped (got {} bytes)",
+            signed_data.len()
+        );
+        assert_checksum_matches(&signed_data, &checksum);
+    }
+
+    #[test]
+    fn verify_checksum_leading_and_trailing_zeros_without_nonce() {
+        let mut checksum = vec![0xcd; 32];
+        checksum[0] = 0x00;
+        checksum[1] = 0x00;
+        checksum[30] = 0x00;
+        checksum[31] = 0x00;
+        let signed_data = signed_data_for(&checksum, None);
+        assert_checksum_matches(&signed_data, &checksum);
+    }
+
+    #[test]
+    fn verify_checksum_and_nonce_both_ending_in_zeros() {
+        let mut checksum = vec![0xab; 32];
+        checksum[31] = 0x00;
+        let mut nonce = random_nonce().to_vec();
+        nonce[14] = 0x00;
+        nonce[15] = 0x00;
+        let signed_data = signed_data_for(&checksum, Some(&nonce));
+
+        assert_checksum_matches(&signed_data, &checksum);
+
+        let vr = make_verification_result(true, signed_data);
+        match verify_nonce(&vr, hex::encode(&nonce)) {
+            Verification::Success { message } => assert!(message.contains("match"), "{message}"),
+            Verification::Failure { message, .. } => panic!("expected nonce success: {message}"),
         }
     }
 
@@ -628,7 +772,6 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         fs_err::write(tmp.path().join("evidence.json"), b"{}").unwrap();
         fs_err::write(tmp.path().join("provenance.json"), CARGO_FIXTURE).unwrap();
-        // oras-style: binary dropped directly beside provenance.json, no artifacts/
         fs_err::write(tmp.path().join("rg"), b"binary").unwrap();
 
         let build = Build::from_dir(&tmp.path().to_path_buf()).unwrap();
@@ -659,7 +802,6 @@ mod tests {
 
     #[test]
     fn build_from_dir_missing_artifacts_is_ok() {
-        // artifacts/ is optional now: absence is not an error.
         let tmp = TempDir::new().unwrap();
         fs_err::write(tmp.path().join("evidence.json"), b"{}").unwrap();
         fs_err::write(tmp.path().join("provenance.json"), CARGO_FIXTURE).unwrap();
@@ -686,7 +828,6 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let nested = tmp.path().join("my-build");
         fs_err::create_dir(&nested).unwrap();
-        // `.` has no `file_name()` component; this used to panic.
         let prev = std::env::current_dir().unwrap();
         std::env::set_current_dir(&nested).unwrap();
         let name = build_dir_name(Path::new("."));
@@ -705,7 +846,10 @@ mod tests {
     #[test]
     fn build_dir_name_falls_back_for_nonexistent_path() {
         // canonicalize fails, so we fall back to the path as given.
-        assert_eq!(build_dir_name(Path::new("does-not-exist")), "does-not-exist");
+        assert_eq!(
+            build_dir_name(Path::new("does-not-exist")),
+            "does-not-exist"
+        );
     }
 
     // --- verify_igvm_measurement (digest comparison) ---

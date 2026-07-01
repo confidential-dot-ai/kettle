@@ -6,5 +6,5 @@ set -x
 export BINSTALL_DISABLE_TELEMETRY=true
 which cargo-binstall || (curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash)
 
-which cargo-nextest || cargo binstall -y cargo-nextest
-which cargo-deny || cargo binstall -y cargo-deny
+# use cargo-binstall to install the bins configured in Cargo.toml
+cargo bin -i

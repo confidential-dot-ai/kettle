@@ -1,6 +1,6 @@
 [package]
 name = "kettle"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2024"
 repository = "https://github.com/confidential-dot-ai/kettle"
 build = "build.rs"
@@ -116,3 +116,11 @@ lto = "thin"
 tss-esapi-sys = { path = "crates/tss-esapi-sys" }
 tss-esapi = { path = "crates/tss-esapi" }
 az-cvm-vtpm = { path = "crates/az-cvm-vtpm" }
+
+[workspace]
+members = ["crates/cargo-bin"]
+
+[package.metadata.bin]
+cargo-nextest = { version = "0.9.138" }
+cargo-deny = { version = "0.19.9" }
+cargo-dist = { bins = ["dist"], git = "https://github.com/frol/cargo-dist", branch = "feat/npm-trusted-publishing", version = "0.32.0" }

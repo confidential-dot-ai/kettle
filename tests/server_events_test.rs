@@ -41,7 +41,7 @@ fn router_with_immediate_complete() -> axum::Router {
 async fn events_endpoint_streams_complete_event() {
     let app = router_with_immediate_complete();
     let body = serde_json::to_vec(&BuildRequest {
-        nonce: "00".into(),
+        nonce: hex::encode(rand::random::<[u8; 16]>()),
         repo_url: Some("https://x".into()),
         repo_ref: None,
         source_data: None,
@@ -123,7 +123,7 @@ async fn events_endpoint_does_not_drop_event_between_snapshot_and_subscribe() {
         .with_state(state);
 
     let body = serde_json::to_vec(&BuildRequest {
-        nonce: "00".into(), repo_url: Some("https://x".into()),
+        nonce: hex::encode(rand::random::<[u8; 16]>()), repo_url: Some("https://x".into()),
         repo_ref: None, source_data: None, source_name: None,
     }).unwrap();
     // Use a clone for the POST so `app` is preserved for the events request.

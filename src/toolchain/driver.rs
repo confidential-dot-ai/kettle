@@ -117,6 +117,10 @@ pub(crate) struct BuildOutput {
     pub(crate) stdout: Vec<u8>,
 }
 
+/// The single `buildType` URI emitted for every kettle build, regardless of
+/// toolchain. See docs/slsa-definitions.md.
+pub(crate) const BUILD_TYPE: &str = "https://confidential.ai/attested-builds/v1";
+
 pub(crate) struct ProvenanceFields {
     pub(crate) build_type: String,
     pub(crate) external_build_command: String,
@@ -421,7 +425,7 @@ mod tests {
             .output()
             .unwrap();
         std::process::Command::new("git")
-            .args(["config", "user.email", "kettle-ci@lunal.dev"])
+            .args(["config", "user.email", "kettle-ci@confidential.ai"])
             .current_dir(tmp.path())
             .output()
             .unwrap();

@@ -2,9 +2,9 @@
   "_type": "https://in-toto.io/Statement/v1",
   "predicate": {
     "buildDefinition": {
-      "buildType": "https://lunal.dev/kettle/cargo@v1",
+      "buildType": "https://confidential.ai/attested-builds/v1",
       "externalParameters": {
-        "buildCommand": "cargo build",
+        "buildCommand": "cargo build --locked --release",
         "source": {
           "digest": {
             "gitCommit": "0fc9cfa2d7cf98bf1d6c370a5359cd4ac451540a",
@@ -32,9 +32,9 @@
           },
           "kettle": {
             "digest": {
-              "sha256": "2e8e398fce4dfb04f1dad4555908b48c08909a3a2dcb026d8a82874556e942ff"
+              "sha256": "626c9fbc2dc16512fc0cb194cdce6ab35de26bd0f7c966ad1979cbf9ca9e4d28"
             },
-            "version": "1.0.0"
+            "version": "1.1.1"
           }
         }
       },
@@ -42,7 +42,7 @@
     },
     "runDetails": {
       "builder": {
-        "id": "https://lunal.dev/kettle-tee/v1"
+        "id": "https://confidential.ai/attested-builds"
       },
       "byproducts": [
         {
@@ -53,9 +53,9 @@
         }
       ],
       "metadata": {
-        "invocationId": "build-20260520-215239-dde1b50e",
-        "startedOn": "2026-05-20T21:52:39.233053+00:00",
-        "finishedOn": "2026-05-20T21:52:39.303931+00:00"
+        "invocationId": "build-20260702-014324-94444edb",
+        "startedOn": "2026-07-02T01:43:24.710743+00:00",
+        "finishedOn": "2026-07-02T01:43:24.768463+00:00"
       }
     }
   },
@@ -63,7 +63,7 @@
   "subject": [
     {
       "digest": {
-        "sha256": "026655cedb5db912f96509f5e58d5090312d6fe74686c663d15ed4a10ff4a9ba"
+        "sha256": "b82d60aded9edb7d9c380403160001932f2f2b87a3d476bf71c19251cc4329cf"
       },
       "name": "kex"
     }

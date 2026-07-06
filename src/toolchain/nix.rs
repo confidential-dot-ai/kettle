@@ -172,7 +172,7 @@ impl ToolchainDriver for NixInputs {
         };
 
         ProvenanceFields {
-            build_type: "https://lunal.dev/kettle/nix@v1".to_string(),
+            build_type: crate::toolchain::BUILD_TYPE.to_string(),
             external_build_command: Self::build_command_display(),
             internal_parameters: InternalParameters {
                 evaluation: Some(evaluation),

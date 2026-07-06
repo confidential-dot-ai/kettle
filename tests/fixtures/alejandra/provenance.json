@@ -2,9 +2,9 @@
   "_type": "https://in-toto.io/Statement/v1",
   "predicate": {
     "buildDefinition": {
-      "buildType": "https://lunal.dev/kettle/nix@v1",
+      "buildType": "https://confidential.ai/attested-builds/v1",
       "externalParameters": {
-        "buildCommand": "nix build",
+        "buildCommand": "nix build --no-link --print-out-paths --extra-experimental-features nix-command --extra-experimental-features flakes",
         "source": {
           "digest": {
             "gitCommit": "8c4a4a572bee519b04e9bb9207e7d993f55ecb4f",
@@ -44,9 +44,9 @@
           },
           "kettle": {
             "digest": {
-              "sha256": "2e8e398fce4dfb04f1dad4555908b48c08909a3a2dcb026d8a82874556e942ff"
+              "sha256": "626c9fbc2dc16512fc0cb194cdce6ab35de26bd0f7c966ad1979cbf9ca9e4d28"
             },
-            "version": "1.0.0"
+            "version": "1.1.1"
           }
         }
       },
@@ -3431,7 +3431,7 @@
     },
     "runDetails": {
       "builder": {
-        "id": "https://lunal.dev/kettle-tee/v1"
+        "id": "https://confidential.ai/attested-builds"
       },
       "byproducts": [
         {
@@ -3442,9 +3442,9 @@
         }
       ],
       "metadata": {
-        "invocationId": "build-20260520-215111-83dcd3d3",
-        "startedOn": "2026-05-20T21:51:11.896078+00:00",
-        "finishedOn": "2026-05-20T21:51:12.274392+00:00"
+        "invocationId": "build-20260702-014316-d885da16",
+        "startedOn": "2026-07-02T01:43:16.659623+00:00",
+        "finishedOn": "2026-07-02T01:43:16.787386+00:00"
       }
     }
   },

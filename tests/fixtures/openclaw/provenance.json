@@ -2,7 +2,7 @@
   "_type": "https://in-toto.io/Statement/v1",
   "predicate": {
     "buildDefinition": {
-      "buildType": "https://lunal.dev/kettle/pnpm@v1",
+      "buildType": "https://confidential.ai/attested-builds/v1",
       "externalParameters": {
         "buildCommand": "pnpm build",
         "source": {
@@ -64,7 +64,7 @@
     },
     "runDetails": {
       "builder": {
-        "id": "https://lunal.dev/kettle-tee/v1"
+        "id": "https://confidential.ai/attested-builds"
       },
       "byproducts": [
         {

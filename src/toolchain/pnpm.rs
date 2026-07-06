@@ -137,7 +137,7 @@ impl ToolchainDriver for PnpmInputs {
 
     fn provenance_fields(self, _git: &GitContext, _merkle_root: &str) -> ProvenanceFields {
         ProvenanceFields {
-            build_type: "https://lunal.dev/kettle/pnpm@v1".to_string(),
+            build_type: crate::toolchain::BUILD_TYPE.to_string(),
             external_build_command: Self::build_command_display(),
             internal_parameters: InternalParameters {
                 evaluation: None,

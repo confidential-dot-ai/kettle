@@ -193,7 +193,7 @@ fn assemble_provenance(
             },
             run_details: RunDetails {
                 builder: Builder {
-                    id: "https://lunal.dev/kettle-tee/v1".to_string(),
+                    id: "https://confidential.ai/attested-builds".to_string(),
                 },
                 metadata: Metadata {
                     invocation_id: metadata.invocation_id.clone(),
@@ -233,7 +233,7 @@ mod tests {
 
     fn make_provenance_fields() -> ProvenanceFields {
         ProvenanceFields {
-            build_type: "https://lunal.dev/kettle/cargo@v1".to_string(),
+            build_type: crate::toolchain::BUILD_TYPE.to_string(),
             external_build_command: "cargo build".to_string(),
             internal_parameters: InternalParameters {
                 evaluation: None,
@@ -329,7 +329,7 @@ mod tests {
         assert_eq!(p.predicate_type, "https://slsa.dev/provenance/v1");
         assert_eq!(
             p.predicate.run_details.builder.id,
-            "https://lunal.dev/kettle-tee/v1"
+            "https://confidential.ai/attested-builds"
         );
         // Subject corresponds to artifacts
         assert_eq!(p.subject.len(), 1);

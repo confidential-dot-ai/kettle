@@ -9,7 +9,7 @@ cd "$REPO_ROOT"
     cd "$REPO_ROOT/target/image"
     rm -f image-manifest.json
     oras push "docker.io/confidentialai/kettle-server:latest" ./* \
-    --annotation "org.opencontainers.image.url=https://docker.io/confidentialai/kettle-server" \
+    --annotation "org.opencontainers.image.url=https://hub.docker.com/r/confidentialai/kettle-server" \
     --annotation "org.opencontainers.image.source=https://github.com/confidential-dot-ai/kettle" \
     --artifact-type application/vnd.steep.cvm-image.v1 \
     --export-manifest image-manifest.json

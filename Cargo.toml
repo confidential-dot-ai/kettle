@@ -4,6 +4,7 @@ version = "1.1.1"
 edition = "2024"
 repository = "https://github.com/confidential-dot-ai/kettle"
 build = "build.rs"
+license = "MIT"
 
 [features]
 # Enables shadow-rs build metadata used by the CLI binary. Off by default so

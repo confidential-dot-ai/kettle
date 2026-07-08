@@ -4,9 +4,9 @@ This document explains the architecture and mechanics of attested builds. After 
 
 We assume you've read [What Are Attested Builds?](attested-builds.md) and understand the core concept: attested builds prove that specific inputs were used to produce specific outputs in a verified environment. This document shows exactly how that works.
 
-## Kettle: Lunal's Implementation
+## Kettle: Confidential's Implementation
 
-Kettle is Lunal's implementation of attested builds. It handles the entire pipeline: input verification, manifest generation, TEE orchestration, build execution, and provenance signing. When we describe "how attested builds work" in this document, we're describing how Kettle works.
+Kettle is [Confidential.ai](https://confidential.ai)'s implementation of attested builds. It handles the entire pipeline: input verification, manifest generation, TEE orchestration, build execution, and provenance signing. When we describe "how attested builds work" in this document, we're describing how Kettle works.
 
 Kettle will be open source and audited.
 

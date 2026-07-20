@@ -65,7 +65,7 @@ impl Provenance {
                 "Provenance not valid SLSA v1.2",
                 &format!(
                     "Expected _type {} and predicateType {:?}\nActual _type {:?} and predicateType   {:?}",
-                    _type, predicate, &self._type, &self.predicate_type
+                    _type, predicate, self._type, self.predicate_type
                 ),
             )
         }

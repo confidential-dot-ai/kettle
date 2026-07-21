@@ -148,3 +148,47 @@ jobs:
             cat p2.out
             exit 1
           fi
+
+  tee:
+    strategy:
+      fail-fast: false                       # one platform failing must not hide the other
+      matrix:
+        runs_on: [snp-metal-cvm, azure-cvm]
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 45
+    steps:
+      - name: prove the runner is in a real TEE before trusting any result
+        run: |
+          if   [ -e /dev/sev-guest ]; then echo "TEE: native SNP (/dev/sev-guest)"
+          elif [ -e /dev/tpmrm0 ];    then echo "TEE: vTPM (/dev/tpmrm0)"
+          else echo "::error::no TEE device (/dev/sev-guest or /dev/tpmrm0) — this runner is not in a CVM"; exit 1; fi
+
+      - name: "build deps (root runner pod: libtss2 + tpm2-tools for --features attest)"
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git curl ca-certificates build-essential pkg-config libtss2-dev tpm2-tools jq
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
+
+      - name: install cargo-nextest
+        run: |
+          set -euo pipefail
+          mkdir -p /usr/local/bin
+          curl -fsSL --connect-timeout 10 --max-time 120 --retry 3 --retry-all-errors https://get.nexte.st/0.9/linux | tar -xz -C /usr/local/bin cargo-nextest
+          cargo-nextest --version
+
+      - name: "TEE integration suite (kettle attest → verify, in the guest)"
+        env:
+          # 4-core/16Gi guest with rke2-on-tmpfs (~5Gi free): cap parallelism +
+          # drop debuginfo so the compile fits (attestation-rs run 29801365953
+          # OOM'd unconstrained).
+          CARGO_BUILD_JOBS: "2"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_INCREMENTAL: "0"
+        run: |
+          cargo nextest run --features attest --run-ignored all --no-fail-fast \
+            -E 'not (test(stored_roothash_from_real_disk) | test(cli_attest_alejandra))' \
+            --test-threads 2

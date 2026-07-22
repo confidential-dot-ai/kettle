@@ -153,7 +153,7 @@ jobs:
     strategy:
       fail-fast: false                       # one platform failing must not hide the other
       matrix:
-        runs_on: [snp-metal-cvm, azure-cvm]
+        runs_on: [snp-metal-cvm, azure-cvm, azure-tdx-cvm]
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 45
     steps:

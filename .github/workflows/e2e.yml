@@ -186,21 +186,6 @@ jobs:
           curl -fsSL --connect-timeout 10 --max-time 120 --retry 3 --retry-all-errors https://get.nexte.st/0.9/linux | tar -xz -C /usr/local/bin cargo-nextest
           cargo-nextest --version
 
-      - name: TEMP DIAGNOSTIC, capture the stderr cli_attest_ripgrep swallows
-        if: matrix.runs_on == 'tdx-metal-cvm'
-        continue-on-error: true
-        run: |
-          set -x
-          nproc; free -g; df -h / /tmp
-          cargo build --features attest --bin kettle 2>&1 | tail -4
-          BIN=$(find target -type f -name kettle -perm -u+x | head -1)
-          echo "bin=$BIN"
-          T=$(mktemp -d)
-          git clone --revision cb66736f146f093497f4dc537b33d0826f9af33c https://github.com/burntsushi/ripgrep "$T" 2>&1 | tail -3
-          echo "=== kettle attest (stderr shown) ==="
-          "$BIN" attest "$T" || echo "EXIT=$?"
-          df -h / /tmp
-
       - name: "TEE integration suite (kettle attest → verify, in the guest)"
         env:
           # 4-core/16Gi guest with rke2-on-tmpfs (~5Gi free): cap parallelism +

@@ -141,7 +141,13 @@ fn cli_attest_ripgrep() -> anyhow::Result<()> {
         .output()
         .expect("failed to kettle attest");
 
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "kettle attest failed: status={:?}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
 
     let build_dir = tmp.path().join("kettle-build");
     let output = Command::new(kettle_bin())
@@ -185,7 +191,13 @@ fn cli_attest_alejandra() -> anyhow::Result<()> {
         .output()
         .expect("failed to kettle attest");
 
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "kettle attest failed: status={:?}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
 
     let build_dir = tmp.path().join("kettle-build");
     let output = Command::new(kettle_bin())

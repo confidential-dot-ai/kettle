@@ -153,15 +153,21 @@ jobs:
     strategy:
       fail-fast: false                       # one platform failing must not hide the other
       matrix:
-        runs_on: [snp-metal-cvm, azure-snp-cvm, azure-tdx-cvm]
+        runs_on: [snp-metal-cvm, azure-snp-cvm, azure-tdx-cvm, tdx-metal-cvm]
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 45
     steps:
       - name: prove the runner is in a real TEE before trusting any result
         run: |
+          # /dev/tdx_guest is checked AFTER /dev/tpmrm0 on purpose: an Azure TDX
+          # guest exposes BOTH, and it attests through the vTPM + IMDS path, so it
+          # must report vTPM. Only bare-metal TDX reaches the tdx_guest branch.
+          # The device node is an underscore; the hyphen spelling is qemu's
+          # -object tdx-guest, which is a host-side string.
           if   [ -e /dev/sev-guest ]; then echo "TEE: native SNP (/dev/sev-guest)"
           elif [ -e /dev/tpmrm0 ];    then echo "TEE: vTPM (/dev/tpmrm0)"
-          else echo "::error::no TEE device (/dev/sev-guest or /dev/tpmrm0) — this runner is not in a CVM"; exit 1; fi
+          elif [ -e /dev/tdx_guest ]; then echo "TEE: native TDX (/dev/tdx_guest)"
+          else echo "::error::no TEE device (/dev/sev-guest, /dev/tpmrm0 or /dev/tdx_guest); this runner is not in a CVM"; exit 1; fi
 
       - name: "build deps (root runner pod: libtss2 + tpm2-tools for --features attest)"
         run: |

@@ -458,6 +458,14 @@ mod tests {
             init_data_match: None,
             collateral_verified: true,
             tcb_status: None,
+            // All None for SNP: these are the TDX measurement compares, plus
+            // launch_digest_match which needs an expected value to compare against.
+            mrtd_match: None,
+            rtmr0_match: None,
+            rtmr1_match: None,
+            rtmr2_match: None,
+            rtmr3_match: None,
+            launch_digest_match: None,
         }
     }
 

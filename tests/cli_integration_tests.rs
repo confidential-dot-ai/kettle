@@ -155,7 +155,13 @@ fn cli_attest_ripgrep() -> anyhow::Result<()> {
         .output()
         .expect("failed to kettle verify");
 
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "kettle verify failed: status={:?}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -205,7 +211,13 @@ fn cli_attest_alejandra() -> anyhow::Result<()> {
         .output()
         .expect("failed to kettle verify");
 
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "kettle verify failed: status={:?}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(

@@ -149,6 +149,23 @@ jobs:
             exit 1
           fi
 
+  # ── PER-JOB ATTESTATION OF THE STANDING RUNNER ───────────────────────────
+  # Runs alongside `tee`, not in front of it. A green run therefore means both
+  # that the suite passed and that an attested environment answered to this
+  # label for this run, rather than only the first.
+  #
+  # Wired for tdx-metal first because it is the runner with no other
+  # instrument. The TDX node image is console-dead by design and the
+  # provisioner discards the operator key, so a signed report is the only
+  # evidence anyone can get about that guest after provisioning.
+  attest-tdx-metal:
+    uses: ./.github/workflows/attest-runner.yml
+    with:
+      runner: tdx-metal-cvm
+      platform: tdx
+      # Published in the tdx-rke2-image-refs ConfigMap alongside the node image.
+      expected_mrtd: '9309eaae9c151e766de0f97b1d1aaeb76b8c8c366080803943fb566521c8f0cf00a142d8b7b0683ed1d42c5a27198ba1'
+
   tee:
     strategy:
       fail-fast: false                       # one platform failing must not hide the other

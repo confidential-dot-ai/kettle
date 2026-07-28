@@ -158,6 +158,14 @@ jobs:
   # instrument. The TDX node image is console-dead by design and the
   # provisioner discards the operator key, so a signed report is the only
   # evidence anyone can get about that guest after provisioning.
+  attest-snp-metal:
+    uses: ./.github/workflows/attest-runner.yml
+    with:
+      runner: snp-metal-cvm
+      platform: snp
+      # Same value the ephemeral c8s lane pins, so it is already known good.
+      expected_launch_digest: '15bc995383ddcf1fee2107753e6c26bc65358602519a342b8ff8fbfdfa4b40865d90b11cef11b7d34934e6c5eed19115'
+
   attest-tdx-metal:
     uses: ./.github/workflows/attest-runner.yml
     with:

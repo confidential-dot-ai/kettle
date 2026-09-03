@@ -154,3 +154,19 @@ Use `cargo nextest run` to run the tests for any platform.
 In a TEE, use `cargo nextest run --ignored all` to run the full integration tests that checkout Rust and Nix projects, build them, attest them, and verify them.
 
 Run `bin/build-reproducible` to use Docker images provided by the StageX project to build a byte-for-byte reproducible build of Kettle into `./target/reproducible/kettle`.
+
+### Build the confidential VM image
+
+`bin/image-build` composes Kettle's confidential VM image with
+confidential-os-builder, expected in a sibling checkout unless `CONFOS_DIR`
+says otherwise:
+
+```bash
+bin/image-build
+CONFOS_DIR=/path/to/confidential-os-builder bin/image-build --force
+```
+
+The unit, udev rule, preset, and service identities are baked into the
+measured root, and `/nix` is the only writable path Kettle adds to the base
+image. See `skills/kettle/SKILL.md` for what the script stages and how to roll
+out the resulting measurement.

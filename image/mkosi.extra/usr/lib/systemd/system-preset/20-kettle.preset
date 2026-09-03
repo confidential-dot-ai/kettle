@@ -1,0 +1,3 @@
+# Bake enablement into the measured root; mkosi applies presets after chroot
+# setup.
+enable kettle-server.service

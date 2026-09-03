@@ -1773,6 +1773,7 @@ dependencies = [
  "hex",
  "igvm",
  "igvm-tools",
+ "libc",
  "memoffset",
  "p256",
  "p384",

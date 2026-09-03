@@ -3,7 +3,7 @@ use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use crate::{
     provenance::{
@@ -248,19 +248,24 @@ fn parse_flake_lock(bytes: &[u8]) -> Result<Vec<FlakeDep>> {
 }
 
 fn evaluate_derivation_graph(path: &Path) -> Result<Value> {
-    let output = Command::new("nix")
-        .args([
-            "derivation",
-            "show",
-            "--recursive",
-            "--extra-experimental-features",
-            "flakes",
-            "--extra-experimental-features",
-            "nix-command",
-        ])
-        .current_dir(path)
-        .output()
-        .context("nix not found")?;
+    let mut cmd = Command::new("nix");
+    cmd.args([
+        "derivation",
+        "show",
+        "--recursive",
+        "--extra-experimental-features",
+        "flakes",
+        "--extra-experimental-features",
+        "nix-command",
+    ])
+    .current_dir(path)
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+    // Evaluation can import-from-derivation, which builds untrusted code.
+    let output = super::confine::spawn(&mut cmd)
+        .context("nix not found")?
+        .wait_with_output()
+        .context("waiting for nix derivation show")?;
     if !output.status.success() {
         return Err(anyhow!(
             "nix derivation show failed: {}",

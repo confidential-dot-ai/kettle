@@ -3,6 +3,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
+# Staged file modes end up in the dm-verity root, so they must not depend on
+# the operator's umask.
+umask 022
 
 FORCE=0
 for arg in "$@"; do
@@ -16,13 +19,12 @@ for arg in "$@"; do
   esac
 done
 
-# Use the conventional checkout location by default. CONFOS lets release jobs
-# select the bin/confos wrapper from a reviewed confidential-os-builder
-# revision.
-CONFOS="${CONFOS:-$HOME/confidential-os-builder/bin/confos}"
-if [[ ! -x "$CONFOS" ]]; then
-  echo "confidential-os-builder executable not found: $CONFOS" >&2
-  echo "set CONFOS to the path of its bin/confos wrapper" >&2
+# CONFOS_DIR selects the confidential-os-builder checkout, defaulting to a
+# sibling of this repo like the other consumers of the builder.
+CONFOS_DIR="${CONFOS_DIR:-$REPO_ROOT/../confidential-os-builder}"
+CONFOS="$CONFOS_DIR/bin/confos"
+if [[ ! -f "$CONFOS" || ! -x "$CONFOS" ]]; then
+  echo "confos not found at $CONFOS (set CONFOS_DIR)" >&2
   exit 1
 fi
 
@@ -37,27 +39,23 @@ if [[ ! -f "$BIN" ]]; then
   exit 1
 fi
 
-# Recreate the generated staging tree on every run. Only the reproducible binary
-# and download cache may be reused; carrying old inputs forward could seal a
-# deleted configuration file or package into the next measured image.
+# Restage from scratch every run so a deleted input cannot survive into the
+# next measured image. Only target/reproducible and target/cache are reused.
+# The static tree under image/ is measured; generated inputs join it below
+# because confos accepts a single --extra tree.
 rm -rf "$REPO_ROOT/target/steep"
-
-# Copy version-controlled static configuration into the composed image tree.
-# Files that remain after chroot setup become part of the dm-verity root and,
-# transitively, the launch measurement. Generated inputs share this tree so the
-# builder needs only one --extra argument.
-mkdir -p "$REPO_ROOT/target/steep/mkosi.extra"
-cp -a "$REPO_ROOT/image/mkosi.extra/." \
-  "$REPO_ROOT/target/steep/mkosi.extra/"
+mkdir -p "$REPO_ROOT/target/steep"
+cp -a "$REPO_ROOT/image/mkosi.extra" "$REPO_ROOT/target/steep/"
 
 # Stage the reproducible kettle-server for the image.
 mkdir -p "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
 cp "$BIN" "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
 
-# Stage the Nix binary tarball so the chroot setup can consume it locally during
-# image assembly instead of downloading it from the chroot.
+# Stage the Nix binary tarball, pinned by digest, so the chroot setup consumes
+# a known input during image assembly instead of downloading from the chroot.
 NIX_VERSION=2.28.0
 NIX_SYSTEM=x86_64-linux
+NIX_SHA256=562ffcdf293ad178ce984858ce152915753cd1055fca6be35adcb41e58be2681
 NIX_TARBALL="nix-${NIX_VERSION}-${NIX_SYSTEM}.tar.xz"
 NIX_URL="https://releases.nixos.org/nix/nix-${NIX_VERSION}/${NIX_TARBALL}"
 NIX_CACHE="$REPO_ROOT/target/cache"
@@ -66,6 +64,8 @@ if [[ ! -f "$NIX_CACHE/$NIX_TARBALL" ]]; then
   curl -fL --retry 3 -o "$NIX_CACHE/$NIX_TARBALL.tmp" "$NIX_URL"
   mv "$NIX_CACHE/$NIX_TARBALL.tmp" "$NIX_CACHE/$NIX_TARBALL"
 fi
+# Verify the cached copy too: the cache persists across runs.
+echo "$NIX_SHA256  $NIX_CACHE/$NIX_TARBALL" | sha256sum -c -
 mkdir -p "$REPO_ROOT/target/steep/mkosi.extra/var/lib/nix-install"
 cp "$NIX_CACHE/$NIX_TARBALL" "$REPO_ROOT/target/steep/mkosi.extra/var/lib/nix-install/"
 
@@ -113,28 +113,28 @@ STAGE_DIR=/var/lib/nix-install
 EOF
 cat >> "$REPO_ROOT/target/steep/install-nix.sh.chroot" <<'EOF'
 
-# Bake the service identity and device-access group into the measured root.
-# Require every name to be absent so a base-image collision fails the build
-# instead of silently selecting an unexpected UID, GID, or group membership.
-require_absent() {
-  local database="$1"
-  local name="$2"
-  if getent "$database" "$name" >/dev/null; then
-    echo "refusing to build image: base image already defines $database entry '$name'" >&2
-    exit 1
-  fi
-}
-require_absent passwd kettle
-require_absent group kettle
-require_absent group sev-guest
-groupadd --system sev-guest
-useradd --create-home --home-dir /home/kettle --shell /bin/bash \
-  --user-group --groups sev-guest kettle
+# Apply the measured sysusers.d declarations now so the Nix installer can run
+# as kettle; mkosi's own systemd-sysusers pass later finds nothing to do.
+# The IDs are pinned in kettle.conf, so a base-image collision shows up as a
+# mismatch here and fails the build instead of shifting the account database.
+systemd-sysusers
+[[ "$(id -u kettle)" == 900 && "$(id -g kettle)" == 900 ]] \
+  || { echo "kettle identity mismatch: $(id kettle)" >&2; exit 1; }
+[[ "$(getent group sev-guest | cut -d: -f3)" == 901 ]] \
+  || { echo "sev-guest group mismatch: $(getent group sev-guest)" >&2; exit 1; }
+id -nG kettle | tr ' ' '\n' | grep -qx sev-guest \
+  || { echo "kettle is not a member of sev-guest" >&2; exit 1; }
 
-# Seed /nix in the measured lower root. At boot, 60-kettle.conf mounts Kettle's
-# only additional writable state overlay here while retaining the baked Nix
-# installation below it. Creating the directory up front also avoids the
-# installer's attempt to call sudo as the unprivileged kettle user.
+# sysusers does not create home directories. Seed it from /etc/skel: the Nix
+# installer only appends to an existing ~/.profile, and the unit's `bash -lc`
+# relies on that file to put nix on PATH.
+install -d -m 0755 -o kettle -g kettle /home/kettle
+cp -a /etc/skel/. /home/kettle/
+chown -R kettle:kettle /home/kettle
+
+# Seed /nix in the measured lower root; 60-kettle.conf overlays writable state
+# on it at boot. Creating it up front also keeps the installer from calling
+# sudo as the unprivileged kettle user.
 install -d -m 0755 -o kettle -g kettle /nix
 
 # Extract the staged nix binary tarball into a scratch dir under kettle's home
@@ -159,6 +159,10 @@ rm -rf /var/lib/sgx-install
 EOF
 chmod +x "$REPO_ROOT/target/steep/install-nix.sh.chroot"
 
+# git and cp preserve checkout modes, which vary with the operator's umask and
+# would change the roothash between machines building the same commit.
+chmod -R u=rwX,go=rX "$REPO_ROOT/target/steep"
+
 # Build from freshly staged inputs with the selected confidential-os-builder.
 "$CONFOS" build "$REPO_ROOT/target/image" \
   --smp 10 --memory 20G \
@@ -170,4 +174,4 @@ echo "./target/steep contains the staged image inputs and chroot setup script."
 echo "./target/image contains an image, including IGVM measurements, to run attested builds in CVMs."
 echo
 echo "To use the image, run:"
-echo "  bin/kettle-orchestrator target/image"
+echo "  sudo kettle-orchestrator target/image"

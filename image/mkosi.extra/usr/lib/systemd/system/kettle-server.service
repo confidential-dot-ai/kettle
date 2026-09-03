@@ -11,8 +11,12 @@ Group=kettle
 NoNewPrivileges=yes
 CacheDirectory=kettle-server
 Environment=CARGO_HOME=/var/cache/kettle-server/cargo
-# Access to /dev/sev-guest is assigned by the measured udev rule.
+# sev-guest grants the server /dev/sev-guest (measured udev rule). Builds run
+# untrusted code and must not inherit it, so the server drops supplementary
+# groups before exec'ing build tools; that needs CAP_SETGID and nothing else.
 SupplementaryGroups=sev-guest
+AmbientCapabilities=CAP_SETGID
+CapabilityBoundingSet=CAP_SETGID
 
 [Install]
 WantedBy=multi-user.target

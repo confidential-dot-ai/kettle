@@ -2,6 +2,7 @@ pub(crate) mod driver;
 pub(crate) use driver::*;
 
 pub(crate) mod runner;
+pub(crate) mod confine;
 
 pub(crate) mod cargo;
 pub(crate) mod cargo_lock;

@@ -25,23 +25,51 @@ fn image_bakes_in_the_kettle_service_contract() {
     let unit = repo_file("image/mkosi.extra/usr/lib/systemd/system/kettle-server.service");
     let preset = repo_file("image/mkosi.extra/usr/lib/systemd/system-preset/20-kettle.preset");
 
+    let directives = active_config_lines(&unit);
     for directive in [
         "ExecStart=/bin/bash -lc 'exec /usr/local/bin/kettle-server'",
         "User=kettle",
         "Group=kettle",
         "SupplementaryGroups=sev-guest",
+        // Lets the server drop sev-guest from build children (src/toolchain/confine.rs).
+        "AmbientCapabilities=CAP_SETGID",
+        "CapabilityBoundingSet=CAP_SETGID",
         "NoNewPrivileges=yes",
         "WantedBy=multi-user.target",
     ] {
-        assert!(
-            unit.lines().any(|line| line == directive),
-            "missing {directive}"
-        );
+        assert!(directives.contains(&directive), "missing {directive}");
     }
 
     assert_eq!(
         active_config_lines(&preset),
         ["enable kettle-server.service"]
+    );
+}
+
+#[test]
+fn image_pins_service_identities() {
+    let sysusers = repo_file("image/mkosi.extra/usr/lib/sysusers.d/kettle.conf");
+    let entries: Vec<String> = active_config_lines(&sysusers)
+        .iter()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect();
+    let has = |prefix: &str| entries.iter().any(|entry| entry.starts_with(prefix));
+
+    assert!(
+        has("g kettle 900"),
+        "kettle group must be pinned: {entries:?}"
+    );
+    assert!(
+        has("g sev-guest 901"),
+        "sev-guest group must be pinned: {entries:?}"
+    );
+    assert!(
+        has("u kettle 900:900"),
+        "kettle user must be pinned: {entries:?}"
+    );
+    assert!(
+        has("m kettle sev-guest"),
+        "kettle must join sev-guest: {entries:?}"
     );
 }
 
@@ -56,79 +84,46 @@ fn image_bakes_in_sev_guest_device_permissions() {
 }
 
 #[test]
-fn image_build_rejects_identity_collisions_before_provisioning() {
+fn image_build_stages_measured_inputs_in_order() {
     let script = repo_file("bin/image-build");
+    // Search the code only, so comments cannot satisfy an assertion.
+    let code = active_config_lines(&script).join("\n");
+    let position = |needle: &str| {
+        code.find(needle)
+            .unwrap_or_else(|| panic!("bin/image-build lacks `{needle}`"))
+    };
 
-    let guard_start = script.find("require_absent() {").unwrap();
-    let guard_end = script[guard_start..]
-        .find("\n}\n")
-        .map(|offset| guard_start + offset)
-        .unwrap();
-    let guard_body = &script[guard_start..guard_end];
-    for command in [
-        r#"if getent "$database" "$name" >/dev/null; then"#,
-        "refusing to build image: base image already defines",
-        "exit 1",
-    ] {
-        assert!(
-            guard_body.contains(command),
-            "missing fail-closed behavior: {command}"
-        );
-    }
+    let stage_reset = position(r#"rm -rf "$REPO_ROOT/target/steep""#);
+    let stage_copy = position(r#"cp -a "$REPO_ROOT/image/mkosi.extra""#);
+    let nix_verify = position(r#"echo "$NIX_SHA256  $NIX_CACHE/$NIX_TARBALL" | sha256sum -c -"#);
+    let nix_stage = position(r#"cp "$NIX_CACHE/$NIX_TARBALL""#);
+    let sysusers = position("systemd-sysusers");
+    let nix_install = position("./install --no-daemon");
+    let normalize = position(r#"chmod -R u=rwX,go=rX "$REPO_ROOT/target/steep""#);
+    let build = position(r#""$CONFOS" build "$REPO_ROOT/target/image""#);
 
-    let groupadd = script.find("groupadd --system sev-guest").unwrap();
-    let useradd = script.find("useradd --create-home").unwrap();
-    for guard in [
-        "require_absent passwd kettle",
-        "require_absent group kettle",
-        "require_absent group sev-guest",
-    ] {
-        let guard = script
-            .find(guard)
-            .unwrap_or_else(|| panic!("missing fail-closed identity guard: {guard}"));
-        assert!(guard < groupadd, "identity guard must run before groupadd");
-        assert!(guard < useradd, "identity guard must run before useradd");
-    }
-
-    assert!(!script.contains("usermod --append"));
-    assert!(!script.contains("|| groupadd"));
-    assert!(script.contains("--user-group --groups sev-guest kettle"));
-}
-
-#[test]
-fn image_build_uses_measured_configuration_without_cloud_init() {
-    let script = repo_file("bin/image-build");
-
-    let stage_reset = script.find(r#"rm -rf "$REPO_ROOT/target/steep""#).unwrap();
-    let stage_copy = script.find("cp -a").unwrap();
-    let groupadd = script.find("groupadd --system sev-guest").unwrap();
-    let useradd = script.find("useradd --create-home").unwrap();
-    let build = script
-        .find(r#""$CONFOS" build "$REPO_ROOT/target/image""#)
-        .unwrap();
-
-    assert!(!script.contains("if [[ $FORCE -eq 1 ]]; then"));
     assert!(
         stage_reset < stage_copy,
         "staging must be reset before static files are copied"
     );
     assert!(
-        stage_copy < build,
-        "static files must be staged before the image build"
+        nix_verify < nix_stage,
+        "the Nix tarball digest must be checked before staging"
     );
     assert!(
-        groupadd < useradd,
-        "the supplementary group must exist before the user"
+        sysusers < nix_install,
+        "identities must exist before Nix installs as kettle"
     );
-    assert!(script.contains(r#"CONFOS="${CONFOS:-$HOME/confidential-os-builder/bin/confos}""#));
-    assert!(script.contains(r#"[[ ! -x "$CONFOS" ]]"#));
-    assert!(script.contains("set CONFOS to the path of its bin/confos wrapper"));
-    assert!(script.contains(r#""$CONFOS" build "$REPO_ROOT/target/image""#));
-
-    for obsolete in ["--cloud-init", "user-data.yml", "bin/steep", "cd ~/steep"] {
-        assert!(
-            !script.contains(obsolete),
-            "obsolete image setup remains: {obsolete}"
-        );
-    }
+    assert!(
+        stage_copy < normalize && normalize < build,
+        "modes must be normalised after staging, before the build"
+    );
+    assert!(
+        code.contains("umask 022"),
+        "staged modes must not depend on the operator's umask"
+    );
+    assert!(
+        !code.contains("--cloud-init"),
+        "first-boot configuration must be measured, not cloud-init"
+    );
 }

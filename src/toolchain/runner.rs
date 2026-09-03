@@ -25,7 +25,7 @@ use super::driver::{Artifact, BuildMetadata, GitContext, ProvenanceFields, Toolc
 /// produce incorrect provenance.
 pub(crate) fn stream_command(cmd: &mut Command, sink: &crate::toolchain::EventSink) -> Result<Vec<u8>> {
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = cmd.spawn().context("failed to spawn child")?;
+    let mut child = super::confine::spawn(cmd).context("failed to spawn child")?;
     let stdout = child.stdout.take().expect("piped");
     let stderr = child.stderr.take().expect("piped");
 

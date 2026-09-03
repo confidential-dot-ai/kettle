@@ -158,24 +158,15 @@ Run `bin/build-reproducible` to use Docker images provided by the StageX project
 ### Build the confidential VM image
 
 `bin/image-build` composes Kettle's confidential VM image with
-confidential-os-builder. It uses
-`$HOME/confidential-os-builder/bin/confos` by default; set `CONFOS` to select
-another checkout explicitly:
+confidential-os-builder, expected in a sibling checkout unless `CONFOS_DIR`
+says otherwise:
 
 ```bash
 bin/image-build
-CONFOS=/path/to/confidential-os-builder/bin/confos bin/image-build --force
+CONFOS_DIR=/path/to/confidential-os-builder bin/image-build --force
 ```
 
-Every invocation recreates the internal `target/steep` staging tree while
-preserving the reusable binary and download cache. The build bakes the
-`kettle-server` unit, `/dev/sev-guest` udev rule, measured systemd preset, and
-service identities into the dm-verity root. Identity-name collisions fail the
-build instead of inheriting unexpected user or group IDs. `/nix` is Kettle's
-only addition to confidential-os-builder's writable-state set; `/usr` and most
-of `/etc` stay read-only. This replaces the former first-boot cloud-init writes
-to `/etc`.
-
-These static inputs change the launch digest. Before deployment, rebuild and
-republish the image with `bin/image-push`, then update the digest-pinned OCI
-image reference and every expected launch-measurement reference atomically.
+The unit, udev rule, preset, and service identities are baked into the
+measured root, and `/nix` is the only writable path Kettle adds to the base
+image. See `skills/kettle/SKILL.md` for what the script stages and how to roll
+out the resulting measurement.

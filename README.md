@@ -154,3 +154,28 @@ Use `cargo nextest run` to run the tests for any platform.
 In a TEE, use `cargo nextest run --ignored all` to run the full integration tests that checkout Rust and Nix projects, build them, attest them, and verify them.
 
 Run `bin/build-reproducible` to use Docker images provided by the StageX project to build a byte-for-byte reproducible build of Kettle into `./target/reproducible/kettle`.
+
+### Build the confidential VM image
+
+`bin/image-build` composes Kettle's confidential VM image with
+confidential-os-builder. It uses
+`$HOME/confidential-os-builder/bin/confos` by default; set `CONFOS` to select
+another checkout explicitly:
+
+```bash
+bin/image-build
+CONFOS=/path/to/confidential-os-builder/bin/confos bin/image-build --force
+```
+
+Every invocation recreates the internal `target/steep` staging tree while
+preserving the reusable binary and download cache. The build bakes the
+`kettle-server` unit, `/dev/sev-guest` udev rule, measured systemd preset, and
+service identities into the dm-verity root. Identity-name collisions fail the
+build instead of inheriting unexpected user or group IDs. `/nix` is Kettle's
+only addition to confidential-os-builder's writable-state set; `/usr` and most
+of `/etc` stay read-only. This replaces the former first-boot cloud-init writes
+to `/etc`.
+
+These static inputs change the launch digest. Before deployment, rebuild and
+republish the image with `bin/image-push`, then update the digest-pinned OCI
+image reference and every expected launch-measurement reference atomically.

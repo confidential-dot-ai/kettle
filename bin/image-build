@@ -16,6 +16,16 @@ for arg in "$@"; do
   esac
 done
 
+# Use the conventional checkout location by default. CONFOS lets release jobs
+# select the bin/confos wrapper from a reviewed confidential-os-builder
+# revision.
+CONFOS="${CONFOS:-$HOME/confidential-os-builder/bin/confos}"
+if [[ ! -x "$CONFOS" ]]; then
+  echo "confidential-os-builder executable not found: $CONFOS" >&2
+  echo "set CONFOS to the path of its bin/confos wrapper" >&2
+  exit 1
+fi
+
 BIN="$REPO_ROOT/target/reproducible/kettle-server"
 
 if [[ ! -f "$BIN" || $FORCE -eq 1 ]]; then
@@ -27,17 +37,25 @@ if [[ ! -f "$BIN" ]]; then
   exit 1
 fi
 
-if [[ $FORCE -eq 1 ]]; then
-  rm -rf "$REPO_ROOT/target/steep"
-fi
+# Recreate the generated staging tree on every run. Only the reproducible binary
+# and download cache may be reused; carrying old inputs forward could seal a
+# deleted configuration file or package into the next measured image.
+rm -rf "$REPO_ROOT/target/steep"
 
-# set up reproducible kettle-server for the image
+# Copy version-controlled static configuration into the composed image tree.
+# Files that remain after chroot setup become part of the dm-verity root and,
+# transitively, the launch measurement. Generated inputs share this tree so the
+# builder needs only one --extra argument.
+mkdir -p "$REPO_ROOT/target/steep/mkosi.extra"
+cp -a "$REPO_ROOT/image/mkosi.extra/." \
+  "$REPO_ROOT/target/steep/mkosi.extra/"
+
+# Stage the reproducible kettle-server for the image.
 mkdir -p "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
 cp "$BIN" "$REPO_ROOT/target/steep/mkosi.extra/usr/local/bin"
 
-# Stage the nix binary tarball into the image so the chroot install script can
-# extract it without network access. mkosi runs finalize scripts with
-# WithNetwork=no by default, so we can't download from inside the chroot.
+# Stage the Nix binary tarball so the chroot setup can consume it locally during
+# image assembly instead of downloading it from the chroot.
 NIX_VERSION=2.28.0
 NIX_SYSTEM=x86_64-linux
 NIX_TARBALL="nix-${NIX_VERSION}-${NIX_SYSTEM}.tar.xz"
@@ -56,8 +74,8 @@ cp "$NIX_CACHE/$NIX_TARBALL" "$REPO_ROOT/target/steep/mkosi.extra/var/lib/nix-in
 # verifiers (kbs/Cargo.toml hardcodes `attestation-service/all-verifier`), which
 # link against libsgx_dcap_quoteverify and need its headers. Those packages live
 # only in Intel's third-party SGX apt repo, NOT the pinned Ubuntu snapshot mirror
-# steep builds from, so — like the nix tarball above — we fetch them on the host
-# (pinned by sha256 for reproducibility) and stage them for an offline dpkg
+# confidential-os-builder uses. Like the Nix tarball above, we fetch them on the
+# host, verify their pinned SHA-256 digests, and stage them for an offline dpkg
 # install in the chroot. Their runtime deps (libc6/libgcc-s1/libstdc++6) are
 # already present via build-essential. `noble1` builds are the newest Intel
 # publishes; they install fine on the resolute base. List headers first so the
@@ -82,7 +100,7 @@ for entry in "${SGX_DEBS[@]}"; do
   cp "$NIX_CACHE/$deb" "$SGX_STAGE/"
 done
 
-# Generate the in-chroot install script. The `.chroot` suffix tells mkosi to
+# Generate the in-chroot setup script. The `.chroot` suffix tells mkosi to
 # execute the file inside the image's chroot via systemd-nspawn; `#!/bin/bash`
 # is required because mkosi execs the file directly (no shell wrapper).
 cat > "$REPO_ROOT/target/steep/install-nix.sh.chroot" <<EOF
@@ -95,15 +113,28 @@ STAGE_DIR=/var/lib/nix-install
 EOF
 cat >> "$REPO_ROOT/target/steep/install-nix.sh.chroot" <<'EOF'
 
-# Create the kettle user with a home directory now so we can install nix as
-# them. Cloud-init's user-data declares the same user; when it runs at first
-# boot it will detect the existing account and reconcile group membership
-# instead of recreating it.
-useradd --create-home --home-dir /home/kettle --shell /bin/bash kettle
+# Bake the service identity and device-access group into the measured root.
+# Require every name to be absent so a base-image collision fails the build
+# instead of silently selecting an unexpected UID, GID, or group membership.
+require_absent() {
+  local database="$1"
+  local name="$2"
+  if getent "$database" "$name" >/dev/null; then
+    echo "refusing to build image: base image already defines $database entry '$name'" >&2
+    exit 1
+  fi
+}
+require_absent passwd kettle
+require_absent group kettle
+require_absent group sev-guest
+groupadd --system sev-guest
+useradd --create-home --home-dir /home/kettle --shell /bin/bash \
+  --user-group --groups sev-guest kettle
 
-# Pre-create /nix owned by kettle. The nix installer would otherwise try to
-# `sudo mkdir /nix && chown` — and kettle is not in sudoers, so that would
-# fail with the same "sudo failed" symptom as before.
+# Seed /nix in the measured lower root. At boot, 60-kettle.conf mounts Kettle's
+# only additional writable state overlay here while retaining the baked Nix
+# installation below it. Creating the directory up front also avoids the
+# installer's attempt to call sudo as the unprivileged kettle user.
 install -d -m 0755 -o kettle -g kettle /nix
 
 # Extract the staged nix binary tarball into a scratch dir under kettle's home
@@ -112,8 +143,8 @@ WORK=$(runuser -u kettle -- mktemp -d /home/kettle/nix-install.XXXXXX)
 tar -xf "$STAGE_DIR/nix-$NIX_VERSION-$NIX_SYSTEM.tar.xz" -C "$WORK"
 chown -R kettle:kettle "$WORK"
 
-# Single-user install. --no-channel-add avoids `nix-channel --update`, which
-# would need network access that mkosi's finalize sandbox doesn't grant.
+# Single-user install. --no-channel-add skips `nix-channel --update`, so image
+# assembly consumes only the tarball staged above regardless of chroot network.
 runuser -l kettle -c "cd '$WORK/nix-$NIX_VERSION-$NIX_SYSTEM' && ./install --no-daemon --yes --no-channel-add"
 
 # Remove the staged tarball and extraction dir so they don't bloat the image.
@@ -128,69 +159,14 @@ rm -rf /var/lib/sgx-install
 EOF
 chmod +x "$REPO_ROOT/target/steep/install-nix.sh.chroot"
 
-# set up the cloud-init user-data file
-OUT="$REPO_ROOT/target/steep/user-data.yml"
+# Build from freshly staged inputs with the selected confidential-os-builder.
+"$CONFOS" build "$REPO_ROOT/target/image" \
+  --smp 10 --memory 20G \
+  --extra "$REPO_ROOT/target/steep/mkosi.extra" \
+  --package git,curl,ca-certificates,build-essential,cargo,tpm2-tss,passwd,pkg-config,protobuf-compiler,libssl-dev,libtss2-dev,libclang-dev,cmake \
+  --script "$REPO_ROOT/target/steep/install-nix.sh.chroot"
 
-read -r -d '' UNIT <<'EOF' || true
-[Unit]
-Description=Kettle build server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-ExecStart=/bin/bash -lc 'exec /usr/local/bin/kettle-server'
-Restart=no
-User=kettle
-Group=kettle
-NoNewPrivileges=yes
-CacheDirectory=kettle-server
-Environment=CARGO_HOME=/var/cache/kettle-server/cargo
-SupplementaryGroups=sev-guest
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-{
-  echo "#cloud-config"
-  echo "users:"
-  echo "  - name: kettle"
-  echo "    groups: [sev-guest]"
-  echo "groups:"
-  echo "  - sev-guest"
-  echo "write_files:"
-  echo "  - path: /etc/systemd/system/kettle-server.service"
-  echo "    permissions: '0644'"
-  echo "    owner: root:root"
-  echo "    content: |"
-  while IFS= read -r line; do
-    echo "      $line"
-  done <<< "$UNIT"
-  echo "  - path: /etc/udev/rules.d/99-sev-guest.rules"
-  echo "    permissions: '0644'"
-  echo "    owner: root:root"
-  echo "    content: |"
-  echo "      KERNEL==\"sev-guest\", GROUP=\"sev-guest\", MODE=\"0660\""
-  echo "runcmd:"
-  # The kernel creates /dev/sev-guest at boot, before the rule above lands;
-  # reload and re-trigger so the rule applies before the server starts.
-  echo "  - udevadm control --reload-rules"
-  echo "  - udevadm trigger --name-match=/dev/sev-guest"
-  echo "  - systemctl enable --now kettle-server.service"
-} > "$OUT"
-
-# run steep to build the image
-(
-    cd ~/steep
-    bin/steep build "$REPO_ROOT/target/image" \
-      --smp 10 --memory 20G \
-      --extra $REPO_ROOT/target/steep/mkosi.extra \
-      --cloud-init $REPO_ROOT/target/steep/user-data.yml \
-      --package git,curl,ca-certificates,build-essential,cargo,tpm2-tss,passwd,pkg-config,protobuf-compiler,libssl-dev,libtss2-dev,libclang-dev,cmake \
-      --script $REPO_ROOT/target/steep/install-nix.sh.chroot \
-)
-
-echo "./target/steep contains a reproducible build of kettle-server and cloud-init user-data."
+echo "./target/steep contains the staged image inputs and chroot setup script."
 echo "./target/image contains an image, including IGVM measurements, to run attested builds in CVMs."
 echo
 echo "To use the image, run:"

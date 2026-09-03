@@ -1,0 +1,18 @@
+[Unit]
+Description=Kettle build server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/bin/bash -lc 'exec /usr/local/bin/kettle-server'
+Restart=no
+User=kettle
+Group=kettle
+NoNewPrivileges=yes
+CacheDirectory=kettle-server
+Environment=CARGO_HOME=/var/cache/kettle-server/cargo
+# Access to /dev/sev-guest is assigned by the measured udev rule.
+SupplementaryGroups=sev-guest
+
+[Install]
+WantedBy=multi-user.target

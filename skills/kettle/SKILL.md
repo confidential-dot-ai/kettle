@@ -63,7 +63,7 @@ The measured boot chain, from hardware up:
    EFI binary. The cmdline pins the **dm-verity roothash**, so the measured IGVM
    transitively commits to the exact root filesystem.
 3. **disk.raw** carries the read-only rootfs plus a GPT `root-verity` partition
-   (built by steep/mkosi/systemd-repart) holding the dm-verity hash tree. The
+   (built by confidential-os-builder with mkosi/systemd-repart) holding the
    kernel refuses any rootfs block that doesn't hash to the pinned roothash.
 4. A writable **scratch disk** (ext4, `LABEL=scratch`) is created fresh per
    launch for build workspaces — nothing persists across boots, and nothing
@@ -112,14 +112,16 @@ build events over SSE, download the result archive, and verify it offline.
    `src/config.rs` in the repos. Never guess flags.
 2. **Build binaries reproducibly**: `bin/build-reproducible` (StageX Docker,
    static musl `kettle` + `kettle-server`).
-3. **Build the image**: `bin/image-build` → `target/image/` with all artifacts.
+3. **Build the image**: `bin/image-build` cleanly restages measured inputs and
+   writes all artifacts to `target/image/`.
 4. **Publish**: `bin/image-push` (oras → GHCR, digest self-check included).
 5. **Run**: `sudo kettle-orchestrator <IMAGE_DIR>` on an SEV-SNP host, or
    `kettle-orchestrator <IMAGE_DIR> --exec` to boot a single interactive CVM.
 6. **Build through it**: `bin/remote-build <REPO_URL> <REF>` or curl the HTTP API.
 7. **Verify**: `kettle verify <build-dir> --nonce <hex> --igvm guest.igvm --image disk.raw`.
-8. **After any image change**, re-measure (`igvm-tools measure`) and update every
-   attestation reference value that pins the old launch digest.
+8. **After any image change**, rebuild and publish, then update every
+   digest-pinned OCI reference and expected launch-measurement reference in the
+   same rollout.
 
 ## Critical guidelines
 
@@ -136,12 +138,12 @@ build events over SSE, download the result archive, and verify it offline.
   confidentiality or attestation "was tested". If SNP hardware is unavailable,
   say so explicitly and stop at the non-confidential boundary.
 - **The measurement is the contract.** Any change to the kernel, initrd, kernel
-  cmdline, OVMF, vCPU count (`smp`), or root filesystem changes the SNP launch
-  digest. Attestation verifiers pin that digest, so image changes and reference-
-  value updates must land in lockstep — otherwise every verification (including
-  `kettle verify --igvm`) starts failing, or worse, keeps passing against a
-  stale image. Treat "rebuild image" and "update expected measurement" as one
-  atomic operation.
+  cmdline, OVMF, vCPU count (`smp`), or root filesystem—including files under
+  `image/mkosi.extra`—changes the SNP launch digest. Attestation verifiers pin
+  that digest, so rebuild and republish the image, then update the digest-pinned
+  OCI reference and expected launch-measurement references in lockstep.
+  Otherwise verification (including `kettle verify --igvm`) fails, or worse,
+  keeps passing against a stale image. Treat the rollout as one atomic operation.
 - **Pin by digest, not by tag.** `:latest` on GHCR can move; the launch digest
   cannot. The orchestrator's `GET /config` returns the digest-pinned reference
   it booted from — use that, or compute `sha256(ghcr-manifest.json)` yourself.
@@ -178,33 +180,48 @@ cargo build --features cli,attest,server --bin kettle-server
 
 ```bash
 cd kettle
-bin/image-build          # reuses target/reproducible/kettle-server if present
-bin/image-build --force  # rebuild binary and image from scratch
+bin/image-build          # reuses the reproducible server and download cache
+bin/image-build --force  # rebuilds the server before composing the image
+CONFOS=/path/to/confidential-os-builder/bin/confos bin/image-build
 ```
 
 What the script does (read `bin/image-build` for the full picture):
 
-- Stages the reproducible `kettle-server` into the image at `/usr/local/bin`.
-- Stages offline installers (mkosi chroot scripts run with no network): the Nix
-  tarball and sha256-pinned Intel SGX DCAP debs.
-- Generates cloud-init user-data that creates the `kettle` user, installs a udev
-  rule granting the `sev-guest` group access to `/dev/sev-guest`, and enables a
-  `kettle-server.service` systemd unit (runs as `kettle`, `NoNewPrivileges=yes`,
-  `SupplementaryGroups=sev-guest`).
-- Invokes the **steep** image builder (expected at `~/steep`; mkosi/systemd-repart
-  based) to produce the final artifacts:
+- Recreates the internal `target/steep` staging tree on every run, so a deleted
+  input cannot survive into a later measured image. The reproducible server and
+  download cache live outside that tree and may be reused.
+- Stages the reproducible `kettle-server` at `/usr/local/bin` and copies the
+  version-controlled static configuration from `image/mkosi.extra`. These files
+  become part of the dm-verity root and therefore the launch measurement.
+- Stages installer inputs on the host so chroot setup consumes them locally:
+  the Nix tarball and sha256-pinned Intel SGX DCAP debs.
+- Creates the `kettle` user and the `kettle` and `sev-guest` groups in the
+  image-building chroot. If any name already exists, the build fails rather
+  than inheriting an unexpected UID, GID, or membership.
+- Bakes in the `/dev/sev-guest` udev rule and enables `kettle-server` with a
+  measured systemd preset. First boot no longer needs cloud-init to write a
+  unit, rule, or enablement symlink under read-only `/etc`.
+- Declares `nix` as Kettle's only addition to confidential-os-builder's base
+  writable-state set. The resulting `/nix` overlay preserves the measured Nix
+  installation as its lower layer while allowing runtime store/database writes.
+- Invokes **confidential-os-builder** through `CONFOS`, which defaults to
+  `$HOME/confidential-os-builder/bin/confos`. Set `CONFOS` to select another
+  reviewed checkout explicitly. The final builder command is equivalent to:
 
 ```bash
-bin/steep build target/image \
+CONFOS=~/confidential-os-builder/bin/confos
+"$CONFOS" build target/image \
   --smp 10 --memory 20G \
   --extra  target/steep/mkosi.extra \
-  --cloud-init target/steep/user-data.yml \
   --package git,curl,ca-certificates,build-essential,cargo,... \
   --script target/steep/install-nix.sh.chroot
 ```
 
 The result in `target/image/` includes IGVM launch measurements, so this
-directory is both bootable and verifiable.
+directory is both bootable and verifiable. Changes to any staged binary,
+package, account, unit, rule, preset, or state declaration require rebuilding
+and republishing the image, then updating the digest-pinned OCI reference and
+all expected launch-measurement references in the same deployment change.
 
 ### Publish and pull the OCI artifact
 
@@ -370,8 +387,8 @@ basenames and resolved inside `IMAGE_DIR`.
 - **"kettle-orchestrator requires root (rerun with sudo)"** — pooled mode needs
   root for KVM/SNP; only `--exec` skips the check path shown first.
 - **"manifest version N is unsupported"** — the orchestrator only reads
-  version 2 manifests; rebuild the image with current kettle/steep rather than
-  hand-editing the version field (older shapes are structurally different).
+  version 2 manifests; rebuild with the current Kettle image tooling instead
+  of hand-editing the version field (older shapes are structurally different).
 - **"manifest declares platform=...; only \"snp\" is supported"** — the runtime
   is SEV-SNP-only by design; there is no non-confidential fallback to enable.
 - **"manifest has N variants; exactly one is required"** — split multi-variant

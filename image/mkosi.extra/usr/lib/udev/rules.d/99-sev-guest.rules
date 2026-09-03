@@ -1,0 +1,3 @@
+# Grant the measured sev-guest group access when /dev/sev-guest appears at
+# boot.
+KERNEL=="sev-guest", GROUP="sev-guest", MODE="0660"

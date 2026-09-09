@@ -78,7 +78,7 @@ pub async fn verify(args: VerifyArgs) -> Result<()> {
             ],
             vec![
                 "Git commit".bold().to_string(),
-                format!("{}", provenance.git_commit()),
+                provenance.git_commit().to_string(),
             ],
         ],
         vec![],

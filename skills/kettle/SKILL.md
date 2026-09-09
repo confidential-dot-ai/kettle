@@ -48,7 +48,7 @@ target/image/
 ├── OVMF.fd             # UEFI firmware (also embedded in the IGVM)
 ├── uki.efi             # Unified kernel image: kernel + initrd + cmdline
 ├── roothash            # dm-verity root hash of the rootfs (64 hex chars)
-├── manifest.json       # version-2 image manifest (smp, memory, paths)
+├── manifest.json       # version-3 image manifest (snp_variants, memory, paths)
 └── ghcr-manifest.json  # exact OCI manifest bytes from the last oras push
 ```
 
@@ -63,11 +63,15 @@ The measured boot chain, from hardware up:
    EFI binary. The cmdline pins the **dm-verity roothash**, so the measured IGVM
    transitively commits to the exact root filesystem.
 3. **disk.raw** carries the read-only rootfs plus a GPT `root-verity` partition
-   (built by steep/mkosi/systemd-repart) holding the dm-verity hash tree. The
-   kernel refuses any rootfs block that doesn't hash to the pinned roothash.
-4. A writable **scratch disk** (ext4, `LABEL=scratch`) is created fresh per
-   launch for build workspaces — nothing persists across boots, and nothing
-   writable is part of the measurement.
+   (built by confidential-os-builder with mkosi/systemd-repart) holding the
+   dm-verity hash tree. The kernel refuses any rootfs block that doesn't hash
+   to the pinned roothash.
+4. A writable **scratch disk** is attached fresh per launch with the virtio
+   serial `confai-scratch`. The initrd encrypts it with a per-boot key held in
+   guest RAM and formats it, so nothing persists across boots and nothing
+   writable is part of the measurement. Without that serial the guest falls
+   back to a 2G RAM tmpfs shared by `/tmp`, `/var`, `/home`, and `/nix`, which
+   real builds exhaust.
 
 Because every layer is committed into the launch digest, `kettle verify` can walk
 the chain backwards: attested launch digest → IGVM file → roothash in the UKI
@@ -112,14 +116,15 @@ build events over SSE, download the result archive, and verify it offline.
    `src/config.rs` in the repos. Never guess flags.
 2. **Build binaries reproducibly**: `bin/build-reproducible` (StageX Docker,
    static musl `kettle` + `kettle-server`).
-3. **Build the image**: `bin/image-build` → `target/image/` with all artifacts.
+3. **Build the image**: `bin/image-build` cleanly restages measured inputs and
+   writes all artifacts to `target/image/`.
 4. **Publish**: `bin/image-push` (oras → GHCR, digest self-check included).
 5. **Run**: `sudo kettle-orchestrator <IMAGE_DIR>` on an SEV-SNP host, or
    `kettle-orchestrator <IMAGE_DIR> --exec` to boot a single interactive CVM.
 6. **Build through it**: `bin/remote-build <REPO_URL> <REF>` or curl the HTTP API.
 7. **Verify**: `kettle verify <build-dir> --nonce <hex> --igvm guest.igvm --image disk.raw`.
-8. **After any image change**, re-measure (`igvm-tools measure`) and update every
-   attestation reference value that pins the old launch digest.
+8. **After any image change**, rebuild, publish, and update the pinned
+   references in lockstep (see "The measurement is the contract" below).
 
 ## Critical guidelines
 
@@ -136,19 +141,23 @@ build events over SSE, download the result archive, and verify it offline.
   confidentiality or attestation "was tested". If SNP hardware is unavailable,
   say so explicitly and stop at the non-confidential boundary.
 - **The measurement is the contract.** Any change to the kernel, initrd, kernel
-  cmdline, OVMF, vCPU count (`smp`), or root filesystem changes the SNP launch
-  digest. Attestation verifiers pin that digest, so image changes and reference-
-  value updates must land in lockstep — otherwise every verification (including
-  `kettle verify --igvm`) starts failing, or worse, keeps passing against a
-  stale image. Treat "rebuild image" and "update expected measurement" as one
-  atomic operation.
+  cmdline, OVMF, vCPU count (`smp`), or root filesystem—including files under
+  `image/mkosi.extra`—changes the SNP launch digest. Attestation verifiers pin
+  that digest, so rebuild and republish the image, then update the digest-pinned
+  OCI reference and expected launch-measurement references in lockstep.
+  Otherwise verification (including `kettle verify --igvm`) fails, or worse,
+  keeps passing against a stale image. Treat the rollout as one atomic operation.
 - **Pin by digest, not by tag.** `:latest` on GHCR can move; the launch digest
   cannot. The orchestrator's `GET /config` returns the digest-pinned reference
   it booted from — use that, or compute `sha256(ghcr-manifest.json)` yourself.
 - **One variant per manifest.** The orchestrator refuses manifests with zero or
-  multiple `variants` on purpose: each variant has its own smp-dependent IGVM
-  measurement, and silently picking one would break the verifier's expectation
-  of which digest to trust.
+  multiple `snp_variants` on purpose: each variant has its own smp-dependent
+  IGVM measurement, and silently picking one would break the verifier's
+  expectation of which digest to trust.
+- **Builds never touch `/dev/sev-guest`.** Build tools run untrusted code, so
+  kettle-server drops the `sev-guest` group and ambient capabilities before
+  exec'ing them and refuses to start a build that could still reach the device
+  (`src/toolchain/confine.rs`). The unit grants only `CAP_SETGID` for this.
 
 ## Core workflows
 
@@ -178,33 +187,48 @@ cargo build --features cli,attest,server --bin kettle-server
 
 ```bash
 cd kettle
-bin/image-build          # reuses target/reproducible/kettle-server if present
-bin/image-build --force  # rebuild binary and image from scratch
+bin/image-build          # reuses the reproducible server and download cache
+bin/image-build --force  # rebuilds the server before composing the image
+CONFOS_DIR=/path/to/confidential-os-builder bin/image-build
 ```
 
 What the script does (read `bin/image-build` for the full picture):
 
-- Stages the reproducible `kettle-server` into the image at `/usr/local/bin`.
-- Stages offline installers (mkosi chroot scripts run with no network): the Nix
-  tarball and sha256-pinned Intel SGX DCAP debs.
-- Generates cloud-init user-data that creates the `kettle` user, installs a udev
-  rule granting the `sev-guest` group access to `/dev/sev-guest`, and enables a
-  `kettle-server.service` systemd unit (runs as `kettle`, `NoNewPrivileges=yes`,
-  `SupplementaryGroups=sev-guest`).
-- Invokes the **steep** image builder (expected at `~/steep`; mkosi/systemd-repart
-  based) to produce the final artifacts:
+- Recreates the internal `target/steep` staging tree on every run, so a deleted
+  input cannot survive into a later measured image. The reproducible server and
+  download cache live outside that tree and may be reused.
+- Stages the reproducible `kettle-server` at `/usr/local/bin` and copies the
+  version-controlled static configuration from `image/mkosi.extra`. These files
+  become part of the dm-verity root and therefore the launch measurement.
+- Stages installer inputs on the host so chroot setup consumes them locally:
+  the Nix tarball and the Intel SGX DCAP debs, each verified against a pinned
+  SHA-256 even when served from the download cache.
+- Applies the measured `usr/lib/sysusers.d/kettle.conf` in the chroot: the
+  `kettle` user and group (900) and the `sev-guest` group (901), with pinned
+  IDs. The chroot script fails the build if the applied IDs differ, seeds
+  `/home/kettle` from `/etc/skel`, then installs Nix as `kettle`.
+- Normalises staged file modes (`umask 022` plus a final `chmod`) so two
+  operators building the same commit get the same roothash.
+- Bakes in the `/dev/sev-guest` udev rule and enables `kettle-server` with a
+  measured systemd preset. First boot no longer needs cloud-init to write a
+  unit, rule, or enablement symlink under read-only `/etc`.
+- Declares `nix` as Kettle's only addition to confidential-os-builder's base
+  writable-state set. The resulting `/nix` overlay preserves the measured Nix
+  installation as its lower layer while allowing runtime store/database writes.
+- Invokes **confidential-os-builder** from `CONFOS_DIR` (default: a sibling
+  checkout of this repo). The final builder command is equivalent to:
 
 ```bash
-bin/steep build target/image \
+"$CONFOS_DIR/bin/confos" build target/image \
   --smp 10 --memory 20G \
   --extra  target/steep/mkosi.extra \
-  --cloud-init target/steep/user-data.yml \
   --package git,curl,ca-certificates,build-essential,cargo,... \
   --script target/steep/install-nix.sh.chroot
 ```
 
 The result in `target/image/` includes IGVM launch measurements, so this
-directory is both bootable and verifiable.
+directory is both bootable and verifiable. Every staged input above is part
+of the launch measurement, so any change to them is a lockstep rollout.
 
 ### Publish and pull the OCI artifact
 
@@ -246,14 +270,18 @@ qemu-system-x86_64 -enable-kvm -cpu EPYC-Genoa \
   -object igvm-cfg,id=igvm0,file=guest.igvm \
   -object memory-backend-memfd,id=ram1,size=20G,share=true \
   -object sev-snp-guest,id=sev0,cbitpos=51,reduced-phys-bits=1 \
-  -drive file=disk.raw,format=raw,if=virtio,readonly=on \
-  -drive file=scratch-slot-0.raw,format=raw,if=virtio \
+  -drive file=disk.raw,format=raw,if=none,id=root0,readonly=on \
+  -device virtio-blk-pci,drive=root0 \
+  -drive file=scratch-slot-0.raw,format=raw,if=none,id=scratch0 \
+  -device virtio-blk-pci,drive=scratch0,serial=confai-scratch \
   -smp 10 -m 20G \
   -netdev user,id=net0,hostfwd=tcp:127.0.0.1:23000-:8080 ...
 ```
 
 Note the root disk is `readonly=on` — integrity comes from dm-verity, freshness
-from the per-launch scratch disk.
+from the per-launch scratch disk. Both disks are explicit `-device` entries so
+root always enumerates first, and the scratch device's `serial=confai-scratch`
+is what the initrd keys on; the host never formats the disk.
 
 ### Boot a single CVM interactively
 
@@ -340,7 +368,7 @@ than silently degrading — preserve that behavior in any wrapper you write.
 | `--slots` | 4 | concurrent CVMs |
 | `--hostfwd-base` | 23000 | host port for slot 0 (slot N = base+N → guest 8080) |
 | `--qemu-binary` | `qemu-system-x86_64` | must support igvm-cfg + sev-snp-guest |
-| `--scratch-size` | 30G | per-CVM ephemeral ext4 `LABEL=scratch` disk |
+| `--scratch-size` | 30G | per-CVM ephemeral disk (virtio serial `confai-scratch`; the guest encrypts and formats it) |
 | `--build-timeout-secs` | 1800 | per-job build timeout |
 | `--boot-timeout-secs` | 30 | CVM boot deadline |
 | `--result-ttl-secs` | 1800 | how long results are downloadable |
@@ -348,17 +376,24 @@ than silently degrading — preserve that behavior in any wrapper you write.
 | `--exec` | off | print + exec one slot's QEMU command, then exit |
 | `--console` | off | stream guest console to build clients as events |
 
-### Image manifest (`manifest.json`, version 2)
+### Image manifest (`manifest.json`, version 3)
 
-The orchestrator accepts exactly this shape — version 2, platform `snp`,
-exactly one variant (each variant's IGVM measurement depends on its `smp`):
+The orchestrator accepts the version-3 manifest confidential-os-builder writes:
+platform `snp` or `multi` (a build that also carries TDX measurements) and
+exactly one SNP variant (each variant's IGVM measurement depends on its `smp`).
+Fields it does not read, such as `inputs`, `measurement`, and `tdx`, are
+ignored:
 
 ```json
 {
-  "version": 2,
-  "build":    { "memory": "20G", "platform": "snp" },
-  "outputs":  { "disk_image": { "path": "disk.raw" } },
-  "variants": [ { "smp": 10, "igvm": { "path": "guest-smp10.igvm" } } ]
+  "version": 3,
+  "build":    { "memory": "20G", "format": "raw", "platform": "multi", "timestamp": "…" },
+  "outputs":  { "disk_image": { "path": "disk.raw", "sha256": "…" }, "uki": { "…": "…" } },
+  "snp_variants": [
+    { "smp": 10, "igvm": { "path": "guest-smp10.igvm", "sha256": "…" },
+      "measurement": { "snp_launch_digest": "…", "algorithm": "sha384", "…": "…" } }
+  ],
+  "tdx": { "…": "…" }
 }
 ```
 
@@ -370,12 +405,13 @@ basenames and resolved inside `IMAGE_DIR`.
 - **"kettle-orchestrator requires root (rerun with sudo)"** — pooled mode needs
   root for KVM/SNP; only `--exec` skips the check path shown first.
 - **"manifest version N is unsupported"** — the orchestrator only reads
-  version 2 manifests; rebuild the image with current kettle/steep rather than
-  hand-editing the version field (older shapes are structurally different).
-- **"manifest declares platform=...; only \"snp\" is supported"** — the runtime
-  is SEV-SNP-only by design; there is no non-confidential fallback to enable.
-- **"manifest has N variants; exactly one is required"** — split multi-variant
-  images into one directory per variant; see Critical guidelines for why.
+  version 3 manifests; rebuild with the current confidential-os-builder instead
+  of hand-editing the version field (older shapes are structurally different).
+- **"manifest declares platform=...; only \"snp\" or \"multi\" is supported"** —
+  the runtime is SEV-SNP-only by design; a TDX-only image has nothing to boot.
+- **"manifest has N snp_variants; exactly one is required"** — split
+  multi-variant images into one directory per variant (`bin/image-build` passes
+  a single `--smp`); see Critical guidelines for why.
 - **QEMU rejects `igvm-cfg` / `sev-snp-guest`** — your QEMU lacks IGVM/SNP
   support. Point `--qemu-binary` at a build that has it (deployments ship a
   wrapper that also fixes `LD_LIBRARY_PATH`).

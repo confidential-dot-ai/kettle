@@ -1,6 +1,25 @@
 use std::process::Command;
 use tempfile::TempDir;
 
+/// Assert a subprocess succeeded, reporting what it actually said if it did not.
+///
+/// A bare `assert!(output.status.success())` discards stdout and stderr, so a CI
+/// failure carries no information at all. That cost three hardware runs while
+/// diagnosing an RTMR[3] eventlog mismatch on the tdx-metal lane, and it is
+/// currently what blocks diagnosing an intermittent failure of
+/// `cli_attest_ripgrep` on that same lane: the test fails roughly one run in
+/// three and leaves nothing behind to look at.
+#[track_caller]
+fn assert_ok(output: &std::process::Output, what: &str) {
+    assert!(
+        output.status.success(),
+        "{what} failed: {}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
 fn kettle_bin() -> String {
     // Use the debug binary built by cargo test
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -67,7 +86,7 @@ fn cli_verify() {
         .output()
         .expect("failed to execute kettle verify");
 
-    assert!(output.status.success());
+    assert_ok(&output, "kettle verify");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -84,7 +103,7 @@ fn cli_verify_with_nonce() {
         .output()
         .expect("failed to execute kettle verify");
 
-    assert!(output.status.success());
+    assert_ok(&output, "kettle verify");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -141,7 +160,7 @@ fn cli_attest_ripgrep() -> anyhow::Result<()> {
         .output()
         .expect("failed to kettle attest");
 
-    assert!(output.status.success());
+    assert_ok(&output, "kettle attest");
 
     let build_dir = tmp.path().join("kettle-build");
     let output = Command::new(kettle_bin())
@@ -149,7 +168,7 @@ fn cli_attest_ripgrep() -> anyhow::Result<()> {
         .output()
         .expect("failed to kettle verify");
 
-    assert!(output.status.success());
+    assert_ok(&output, "kettle verify");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -185,7 +204,7 @@ fn cli_attest_alejandra() -> anyhow::Result<()> {
         .output()
         .expect("failed to kettle attest");
 
-    assert!(output.status.success());
+    assert_ok(&output, "kettle attest");
 
     let build_dir = tmp.path().join("kettle-build");
     let output = Command::new(kettle_bin())
@@ -193,7 +212,7 @@ fn cli_attest_alejandra() -> anyhow::Result<()> {
         .output()
         .expect("failed to kettle verify");
 
-    assert!(output.status.success());
+    assert_ok(&output, "kettle verify");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(

@@ -242,6 +242,9 @@ jobs:
           CARGO_INCREMENTAL: "0"
         run: |
           set -euo pipefail
+          # 4-core/16Gi guest with rke2-on-tmpfs (~5Gi free): cap parallelism +
+          # drop debuginfo so the compile fits (attestation-rs run 29801365953
+          # OOM'd unconstrained).
           suite=(cargo nextest run --features attest --run-ignored all --no-fail-fast
             -E 'not (test(stored_roothash_from_real_disk) | test(cli_attest_alejandra))'
             --test-threads 2)

@@ -211,15 +211,46 @@ jobs:
           curl -fsSL --connect-timeout 10 --max-time 120 --retry 3 --retry-all-errors https://get.nexte.st/0.9/linux | tar -xz -C /usr/local/bin cargo-nextest
           cargo-nextest --version
 
+      # On a host with /dev/sev-guest the suite must run the way kettle-server
+      # does in production: as the kettle user, in the sev-guest group, with
+      # CAP_SETGID and nothing else (image/mkosi.extra/usr/lib/systemd/system/
+      # kettle-server.service). Build children then drop the group and the
+      # confinement in src/toolchain/confine.rs holds. Root cannot be confined
+      # that way: it reaches the device whatever groups it drops, so every
+      # confined spawn refuses and the attest tests fail. The runner pod is
+      # root, so it recreates that identity here. Other TEEs have no such
+      # device and keep running as the runner user.
+      - name: "as the production identity where /dev/sev-guest exists"
+        run: |
+          set -euo pipefail
+          [ -e /dev/sev-guest ] || { echo "no /dev/sev-guest; the suite runs as the runner user"; exit 0; }
+          groupadd -g 901 sev-guest
+          groupadd -g 900 kettle
+          useradd -u 900 -g 900 -G sev-guest -m -d /home/kettle -s /bin/bash kettle
+          chgrp sev-guest /dev/sev-guest && chmod 0660 /dev/sev-guest
+          # The toolchain and the checkout were laid down by the runner user;
+          # the suite builds into both. The runner home needs traverse
+          # permission for the rustup and cargo homes underneath it.
+          chmod o+x "$HOME"
+          chown -R kettle:kettle "$GITHUB_WORKSPACE" "$HOME/.cargo" "$HOME/.rustup"
+          echo "RUN_AS_KETTLE=1" >> "$GITHUB_ENV"
+          id kettle; ls -l /dev/sev-guest
       - name: "TEE integration suite (kettle attest → verify, in the guest)"
         env:
-          # 4-core/16Gi guest with rke2-on-tmpfs (~5Gi free): cap parallelism +
-          # drop debuginfo so the compile fits (attestation-rs run 29801365953
-          # OOM'd unconstrained).
           CARGO_BUILD_JOBS: "2"
           CARGO_PROFILE_DEV_DEBUG: "0"
           CARGO_INCREMENTAL: "0"
         run: |
-          cargo nextest run --features attest --run-ignored all --no-fail-fast \
-            -E 'not (test(stored_roothash_from_real_disk) | test(cli_attest_alejandra))' \
-            --test-threads 2
+          set -euo pipefail
+          # 4-core/16Gi guest with rke2-on-tmpfs (~5Gi free): cap parallelism +
+          # drop debuginfo so the compile fits (attestation-rs run 29801365953
+          # OOM'd unconstrained).
+          suite=(cargo nextest run --features attest --run-ignored all --no-fail-fast
+            -E 'not (test(stored_roothash_from_real_disk) | test(cli_attest_alejandra))'
+            --test-threads 2)
+          if [ "${RUN_AS_KETTLE:-}" = 1 ]; then
+            exec setpriv --reuid=kettle --regid=kettle --groups=sev-guest \
+              --inh-caps=+setgid --ambient-caps=+setgid --bounding-set=-all,+setgid \
+              env HOME=/home/kettle CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" "${suite[@]}"
+          fi
+          "${suite[@]}"

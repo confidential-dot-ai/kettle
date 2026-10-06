@@ -117,6 +117,9 @@ pub fn generate_from_system(esapi_out: PathBuf) {
         .header(format!("{}/tss2/tss2_mu.h", tss2_mu_include_path))
         // See this issue: https://github.com/parallaxsecond/rust-cryptoki/issues/12
         .blocklist_type("max_align_t")
+        // libc allocators from stdlib.h; tss-esapi declares its own with the usize
+        // signature rustc requires for runtime symbols.
+        .blocklist_function("malloc|calloc|realloc|free")
         .generate_comments(false)
         .derive_default(true)
         .generate()

@@ -32,14 +32,9 @@
 # that produced a report over this job's nonce, carrying the launch measurement
 # the caller pinned, with a valid signature over that report.
 #
-# WHAT IT DOES NOT PROVE, and what `"collateral_verified": false` on the SNP
-# lanes actually means. The flag does not mean the chain is unchecked: the CLI
-# verifies with its default providers, which embed the AMD root keys and walk
-# each report's VCEK back to them, and the TDX lanes fetch Intel's collateral
-# in full, revocation included. What `false` means is that revocation is
-# skipped on SNP: the default provider fetches no AMD CRL, so a chip key AMD
-# has revoked would still pass. Closing that needs a CRL-fetching cert
-# provider on the verify side, like the one attestation-api already carries.
+# REVOCATION. The CLI checks the report's signature and walks its key back to
+# the vendor root keys. Whether a revoked key is caught depends on the
+# verifier's CRL settings.
 #
 # WHAT IT DOES NOT PROVE. A launch measurement covers the boot chain. It does
 # not cover software installed after boot, which on a standing runner includes
@@ -160,6 +155,7 @@ jobs:
           EVIDENCE: ${{ needs.evidence.outputs.evidence }}
           LAUNCH: ${{ inputs.expected_launch_digest }}
           MRTD: ${{ inputs.expected_mrtd }}
+          PLATFORM: ${{ inputs.platform }}
         run: |
           set -euo pipefail
           # No --features attest here on purpose. This host has no TEE and the
@@ -171,6 +167,10 @@ jobs:
           printf '%s' "$EVIDENCE" | base64 -d > /tmp/evidence.json
 
           ARGS=(verify --evidence /tmp/evidence.json --expected-report-data "$NONCE")
+          # Drop this guard once every pinned cli_ref has `verify --platform`.
+          if attestation-cli verify --help | grep -q -- '--platform'; then
+            ARGS+=(--platform "$PLATFORM")
+          fi
           if [ -n "$LAUNCH" ]; then
             ARGS+=(--expected-launch-digest "$LAUNCH")
           elif [ -n "$MRTD" ]; then

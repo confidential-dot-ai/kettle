@@ -1,3 +1,6 @@
 [advisories]
 unmaintained = 'workspace'
-ignore = ["RUSTSEC-2025-0141", "RUSTSEC-2023-0071"]
+# RUSTSEC-2026-0387: crypto-bigint 0.5 timing, via elliptic-curve 0.13, which
+# p256/p384/ecdsa and sev (p384 ^0.13) pin. Fixed only in crypto-bigint 0.7;
+# drop this with the move to elliptic-curve 0.14 (as attestation-rs does).
+ignore = ["RUSTSEC-2025-0141", "RUSTSEC-2023-0071", "RUSTSEC-2026-0387"]

@@ -194,12 +194,15 @@ jobs:
           elif [ -e /dev/tdx_guest ]; then echo "TEE: native TDX (/dev/tdx_guest)"
           else echo "::error::no TEE device (/dev/sev-guest, /dev/tpmrm0 or /dev/tdx_guest); this runner is not in a CVM"; exit 1; fi
 
-      - name: "build deps (root runner pod: libtss2 + tpm2-tools for --features attest)"
+      # The SNP runner pod is root; the bare-metal TDX one runs as the image's
+      # `runner` user with passwordless sudo (confidential-ci #160).
+      - name: "build deps (libtss2 + tpm2-tools for --features attest)"
         run: |
           set -euo pipefail
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update -qq
-          apt-get install -y -qq --no-install-recommends git curl ca-certificates build-essential pkg-config libtss2-dev tpm2-tools jq
+          SUDO=; [ "$(id -u)" = 0 ] || SUDO=sudo
+          echo "SUDO=$SUDO" >> "$GITHUB_ENV"
+          $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+          $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git curl ca-certificates build-essential pkg-config libtss2-dev tpm2-tools jq
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
@@ -207,8 +210,8 @@ jobs:
       - name: install cargo-nextest
         run: |
           set -euo pipefail
-          mkdir -p /usr/local/bin
-          curl -fsSL --connect-timeout 10 --max-time 120 --retry 3 --retry-all-errors https://get.nexte.st/0.9/linux | tar -xz -C /usr/local/bin cargo-nextest
+          $SUDO mkdir -p /usr/local/bin
+          curl -fsSL --connect-timeout 10 --max-time 120 --retry 3 --retry-all-errors https://get.nexte.st/0.9/linux | $SUDO tar -xz -C /usr/local/bin cargo-nextest
           cargo-nextest --version
 
       # On a host with /dev/sev-guest the suite must run the way kettle-server
@@ -253,4 +256,7 @@ jobs:
               --inh-caps=+setgid --ambient-caps=+setgid --bounding-set=-all,+setgid \
               env HOME=/home/kettle CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" "${suite[@]}"
           fi
+          # A non-root runner cannot reach /dev/tdx_guest or the configfs TSM
+          # report dir; run as root, as the suite does in a per-job TD.
+          if [ -n "${SUDO:-}" ]; then exec sudo -E env "PATH=$PATH" "${suite[@]}"; fi
           "${suite[@]}"

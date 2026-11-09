@@ -256,4 +256,7 @@ jobs:
               --inh-caps=+setgid --ambient-caps=+setgid --bounding-set=-all,+setgid \
               env HOME=/home/kettle CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" "${suite[@]}"
           fi
+          # A non-root runner cannot reach /dev/tdx_guest or the configfs TSM
+          # report dir; run as root, as the suite does in a per-job TD.
+          if [ -n "${SUDO:-}" ]; then exec sudo -E env "PATH=$PATH" "${suite[@]}"; fi
           "${suite[@]}"

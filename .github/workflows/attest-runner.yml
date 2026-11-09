@@ -103,6 +103,7 @@ jobs:
           set -euo pipefail
           # Root on the SNP pod; the TDX pod's runner user has sudo (confidential-ci #160).
           SUDO=; [ "$(id -u)" = 0 ] || SUDO=sudo
+          echo "SUDO=$SUDO" >> "$GITHUB_ENV"
           $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -qq
           $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
             libtss2-dev pkg-config build-essential curl ca-certificates git
@@ -126,7 +127,8 @@ jobs:
                  --git https://github.com/confidential-dot-ai/attestation-rs \
                  --branch "${{ inputs.cli_ref }}" \
                  --features attest attestation-cli
-          attestation-cli attest \
+          # /dev/tdx_guest and the configfs TSM report dir are root-only.
+          $SUDO "$(command -v attestation-cli)" attest \
             --platform '${{ inputs.platform }}' \
             --report-data-hex "$NONCE" > /tmp/evidence.json
           # Carried as a job output rather than an artifact so the verify job

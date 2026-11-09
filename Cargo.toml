@@ -75,7 +75,7 @@ serde_yaml = "0.9.34"
 pretty_assertions = "1.4.1"
 axum = {version = "0.8.9", optional = true}
 tar = {version = "0.4.45", optional = true}
-zip = { version = "2.2", default-features = false, features = ["deflate"], optional = true }
+zip = { version = "9", default-features = false, features = ["deflate"], optional = true }
 dashmap = { version = "6", optional = true }
 tempfile = { version = "3", optional = true }
 tokio-stream = { version = "0.1", features = ["sync"], optional = true }

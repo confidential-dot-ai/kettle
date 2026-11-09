@@ -101,9 +101,10 @@ jobs:
       - name: build deps
         run: |
           set -euo pipefail
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update -qq
-          apt-get install -y -qq --no-install-recommends \
+          # Root on the SNP pod; the TDX pod's runner user has sudo (confidential-ci #160).
+          SUDO=; [ "$(id -u)" = 0 ] || SUDO=sudo
+          $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+          $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
             libtss2-dev pkg-config build-essential curl ca-certificates git
 
       # No rust-cache. There is no workspace checked out here, so its post step

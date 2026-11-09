@@ -133,8 +133,12 @@ jobs:
             --report-data-hex "$NONCE" > /tmp/evidence.json
           # Carried as a job output rather than an artifact so the verify job
           # cannot be handed a different file than the one this job produced.
-          echo "evidence=$(base64 -w0 < /tmp/evidence.json)" >> "$GITHUB_OUTPUT"
-          echo "evidence produced, $(wc -c < /tmp/evidence.json) bytes"
+          # Gzipped: the verify step receives it as one env string, which Linux
+          # caps at 128 KiB, and raw TDX evidence (~110 KB) exceeds that in base64.
+          b64=$(gzip -9n < /tmp/evidence.json | base64 -w0)
+          [ "${#b64}" -lt 131000 ] || { echo "::error::evidence is ${#b64} bytes encoded, over the env string limit"; exit 1; }
+          echo "evidence=$b64" >> "$GITHUB_OUTPUT"
+          echo "evidence produced, $(wc -c < /tmp/evidence.json) bytes (${#b64} encoded)"
 
   verify:
     # Deliberately ubuntu-latest, and deliberately a separate job. A guest that
@@ -167,7 +171,7 @@ jobs:
           cargo install --quiet \
             --git https://github.com/confidential-dot-ai/attestation-rs \
             --branch "${{ inputs.cli_ref }}" attestation-cli
-          printf '%s' "$EVIDENCE" | base64 -d > /tmp/evidence.json
+          printf '%s' "$EVIDENCE" | base64 -d | gunzip > /tmp/evidence.json
 
           ARGS=(verify --evidence /tmp/evidence.json --expected-report-data "$NONCE")
           # Drop this guard once every pinned cli_ref has `verify --platform`.
